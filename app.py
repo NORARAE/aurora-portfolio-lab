@@ -151,7 +151,9 @@ st.markdown(f"""
 
   /* Minimal always-visible controls indicator (first popover in main body). */
   [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 40px;
     height: 40px;
     min-width: 40px;
@@ -180,12 +182,6 @@ st.markdown(f"""
     .hero {{ padding: 0.95rem 0.92rem 0.44rem 0.92rem; }}
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     .stat-value {{ font-size: 1.16rem; }}
-
-    [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }}
   }}
 
   @media (prefers-reduced-motion: reduce) {{
@@ -496,7 +492,7 @@ st.session_state["mini_inflation"] = float(st.session_state.get("inflation", 0.0
 st.session_state["mini_rf"] = float(st.session_state.get("rf", 0.04))
 
 with st.popover("✦"):
-    st.caption("Controls")
+    st.caption("Full controls in the sidebar (‹ top-left)")
     st.text_input(
       "Tickers (stocks or crypto)",
       key="mini_tickers_text",
