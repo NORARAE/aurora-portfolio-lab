@@ -141,12 +141,15 @@ st.markdown(f"""
     background: {SURFACE2};
     border: 1px solid {BORDER};
     border-radius: 16px;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
-    padding: 0.95rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    padding: 0.95rem 1rem;
+    max-height: 80vh;
+    overflow-y: auto;
+    overflow-x: hidden;
   }}
   [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] p,
   [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] li {{
-    font-size: 0.85rem;
+    font-size: 0.84rem;
     font-weight: 400;
     color: {MUTED};
     line-height: 1.5;
@@ -161,10 +164,39 @@ st.markdown(f"""
     font-weight: 600;
     letter-spacing: 0.01em;
   }}
-  [data-testid="stPopoverBody"] .stVerticalBlock {{
-    max-height: 52vh;
+
+  /* Menu popover: elevated floating panel that never clips controls. */
+  [data-testid="stPopoverBody"]:has([data-testid="stSlider"]),
+  [data-testid="stPopoverBody"]:has([data-testid="stNumberInput"]) {{
+    max-height: 80vh;
     overflow-y: auto;
-    padding-right: 4px;
+    padding: 0.95rem 1rem;
+  }}
+  [data-testid="stPopoverBody"]:has([data-testid="stSlider"]) .stVerticalBlock,
+  [data-testid="stPopoverBody"]:has([data-testid="stNumberInput"]) .stVerticalBlock {{
+    max-height: none;
+    overflow: visible;
+  }}
+
+  /* Oracle help popover: compact readable fine print with safe wrapping. */
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) {{
+    max-width: 420px;
+    max-height: 60vh;
+    padding: 0.9rem 1rem;
+  }}
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] p,
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] li {{
+    font-size: 0.82rem;
+    color: {MUTED};
+    line-height: 1.5;
+    font-weight: 400;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }}
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] ol,
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] ul {{
+    margin: 0.2rem 0 0.35rem 0;
+    padding-left: 1rem;
   }}
 
   section[data-testid="stSidebar"] {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
