@@ -1,0 +1,12 @@
+# Pinned to the exact versions this project was built and verified against.
+# Tested on Python 3.13 (June 2026). Pins keep the portfolio piece reproducible:
+# anyone cloning gets the same working stack. Bump deliberately, then re-verify
+# with:  python -m streamlit run app.py
+streamlit==1.58.0
+yfinance==1.5.1
+pandas==3.0.3
+numpy==2.5.0
+plotly==6.8.0
+vaderSentiment==3.3.2
+anthropic==0.115.0   # optional — only needed for the Claude-powered sentiment upgrade
+watchdog==6.0.0      # dev-only — faster file-watching / hot reload during `streamlit run`

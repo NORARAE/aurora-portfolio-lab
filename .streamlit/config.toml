@@ -1,0 +1,29 @@
+# Native Streamlit theme — makes the BUILT-IN widgets (sliders, toggles, pills,
+# the text-input focus ring, buttons) match the aurora palette from app.py.
+# The custom cards/charts are styled in app.py's CSS; this file handles the
+# chrome that CSS can't easily reach. Keep these hexes in sync with the
+# palette block at the top of app.py.
+[theme]
+base                     = "dark"
+primaryColor             = "#8b7bf7"              # ACCENT violet — sliders, focus, active pill
+backgroundColor          = "#0b0a12"              # BG (app.py's CSS gradient layers on top)
+secondaryBackgroundColor = "#15131f"              # SURFACE — inputs, widget wells
+textColor                = "#edeef4"              # TEXT
+linkColor                = "#f5c451"              # GOLD — matches the signature link
+borderColor              = "rgba(255,255,255,0.07)"
+font                     = "Inter"                # loaded via @import in app.py's CSS
+baseRadius               = "0.9rem"               # rounded corners to match the cards
+buttonRadius             = "0.7rem"
+showWidgetBorder         = true
+# Semantic colors so any native positive/negative UI aligns with UP/DOWN/GOLD.
+greenColor               = "#16c784"              # UP
+redColor                 = "#ea3943"              # DOWN
+yellowColor              = "#f5c451"              # GOLD
+violetColor              = "#8b7bf7"              # ACCENT
+
+[theme.sidebar]
+backgroundColor          = "#15131f"              # SURFACE
+secondaryBackgroundColor = "#1c1a28"              # SURFACE2
+borderColor              = "rgba(255,255,255,0.07)"
+primaryColor             = "#4de1d0"              # ACCENT2 cyan — quick-add hovers pop
+baseRadius               = "0.7rem"
