@@ -84,10 +84,10 @@ st.markdown(f"""
     padding: 0.78rem 0.9rem; position: relative; overflow: hidden; }}
   .vcard::before {{ content:''; position:absolute; top:0; left:0; right:0; height:3px;
     background: linear-gradient(90deg, {ACCENT2}, {ACCENT}); opacity:0.8; }}
-  .vcard .vlabel {{ color: {MUTED}; font-size: 0.62rem; font-weight: 700;
+  .vcard .vlabel {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600;
     letter-spacing: 0.1em; text-transform: uppercase; }}
   .vcard .vmain {{ font-size: 1.18rem; font-weight: 800; margin-top: 0.22rem; letter-spacing: -0.02em; }}
-  .vcard .vsub {{ color: {MUTED}; font-size: 0.72rem; margin-top: 0.12rem; }}
+  .vcard .vsub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin-top: 0.12rem; line-height: 1.45; }}
 
   /* Stat grid: fixed 4-up on wide screens, 2-up on smaller screens */
   .stat-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -95,10 +95,10 @@ st.markdown(f"""
   .stat {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 16px;
     padding: 0.76rem 0.88rem; transition: transform 0.15s ease, border-color 0.15s ease; }}
   .stat:hover {{ transform: translateY(-2px); border-color: rgba(139,123,247,0.35); }}
-  .stat-label {{ color: {MUTED}; font-size: 0.62rem; font-weight: 700;
+  .stat-label {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600;
     letter-spacing: 0.1em; text-transform: uppercase; }}
   .stat-value {{ font-size: 1.28rem; font-weight: 800; letter-spacing: -0.02em; margin-top: 0.2rem; }}
-  .stat-sub {{ color: {MUTED}; font-size: 0.66rem; margin-top: 0.14rem; line-height: 1.34; }}
+  .stat-sub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin-top: 0.14rem; line-height: 1.45; }}
   .up-t {{ color: {UP}; }} .down-t {{ color: {DOWN}; }} .gold-t {{ color: {GOLD}; }} .neutral-t {{ color: {TEXT}; }}
 
   /* Holdings */
@@ -106,39 +106,62 @@ st.markdown(f"""
     padding: 0.62rem 0.78rem; margin-bottom: 0.38rem; background: {SURFACE};
     border: 1px solid {BORDER}; border-radius: 12px; }}
   .tkr {{ font-weight: 700; font-size: 0.93rem; }}
-  .tkr-sub {{ color: {MUTED}; font-size: 0.68rem; }}
+  .tkr-sub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; line-height: 1.45; }}
 
-  .section {{ color: {MUTED}; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em;
+  .section {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
     text-transform: uppercase; margin: 0.72rem 0 0.42rem 0; }}
   .badge {{ display:inline-block; padding: 0.3rem 0.8rem; border-radius: 999px; font-weight: 700;
     font-size: 0.7rem; padding: 0.21rem 0.58rem; border: 1px solid rgba(245,196,81,0.3); background: rgba(245,196,81,0.08); color: {GOLD}; }}
   .news {{ border-left: 2px solid rgba(139,123,247,0.4); padding: 0.5rem 0.85rem; margin: 0.4rem 0;
-    color: {TEXT}; font-size: 0.79rem; padding: 0.42rem 0.66rem; margin: 0.28rem 0; background: {SURFACE}; border-radius: 0 10px 10px 0; }}
+    color: {TEXT}; font-size: 0.85rem; font-weight: 400; padding: 0.42rem 0.66rem; margin: 0.28rem 0; background: {SURFACE}; border-radius: 0 10px 10px 0; line-height: 1.45; }}
   [data-testid="stCaptionContainer"] p {{
     color: {MUTED};
-    font-size: 0.68rem;
+    font-size: 0.85rem;
+    font-weight: 400;
     letter-spacing: 0.014em;
-    line-height: 1.36;
+    line-height: 1.45;
   }}
-  [data-testid="stPopoverButton"] {{
-    font-size: 0.66rem;
-    letter-spacing: 0.01em;
+  [data-testid="stMain"] [data-testid="stPopoverButton"] {{
+    min-height: 32px;
+    border-radius: 10px;
+    border: 1px solid {BORDER};
+    background: {SURFACE};
+    color: {MUTED};
+    padding: 0.18rem 0.48rem;
   }}
-  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] p,
-  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] li {{
+  [data-testid="stMain"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] p {{
     font-size: 0.7rem;
-    line-height: 1.25;
-    margin: 0.08rem 0;
+    font-weight: 500;
+    color: {MUTED};
+    white-space: nowrap;
+    line-height: 1;
+    letter-spacing: 0.02em;
   }}
-  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] ul,
-  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] ol {{
+  [data-testid="stPopoverBody"] {{
+    background: {SURFACE2};
+    border: 1px solid {BORDER};
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    padding: 0.95rem;
+  }}
+  [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] p,
+  [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] li {{
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: {MUTED};
+    line-height: 1.5;
+  }}
+  [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] ul,
+  [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] ol {{
     margin: 0.2rem 0 0.35rem 0;
     padding-left: 1rem;
   }}
-  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] strong {{
+  [data-testid="stPopoverBody"] [data-testid="stMarkdownContainer"] strong {{
+    color: {TEXT};
+    font-weight: 600;
     letter-spacing: 0.01em;
   }}
-  [data-testid="stPopover"] .stVerticalBlock {{
+  [data-testid="stPopoverBody"] .stVerticalBlock {{
     max-height: 52vh;
     overflow-y: auto;
     padding-right: 4px;
@@ -177,14 +200,14 @@ st.markdown(f"""
   }}
   .menu-group-title {{
     color: {MUTED};
-    font-size: 0.62rem;
-    font-weight: 700;
+    font-size: 0.7rem;
+    font-weight: 600;
     letter-spacing: 0.11em;
     text-transform: uppercase;
-    margin: 0.2rem 0 0.42rem 0;
+    margin: 0.3rem 0 0.5rem 0;
   }}
   .menu-spacer {{
-    height: 0.45rem;
+    height: 0.7rem;
   }}
 
   /* Phone tuning */
@@ -1029,21 +1052,21 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
       border: 1px solid {BORDER}; border-radius: 12px; }}
     .feed-item .fdot {{ width: 9px; height: 9px; border-radius: 50%;
       margin-top: 0.36rem; flex: none; }}
-    .feed-head {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.4; }}
-    .feed-meta {{ font-size: 0.68rem; font-weight: 600; margin-top: 0.2rem; letter-spacing: 0.01em; }}
-    .feed-score {{ color: {MUTED}; font-weight: 600; font-variant-numeric: tabular-nums;
+    .feed-head {{ color: {TEXT}; font-size: 0.85rem; font-weight: 400; line-height: 1.45; }}
+    .feed-meta {{ font-size: 0.85rem; font-weight: 400; margin-top: 0.2rem; letter-spacing: 0.01em; }}
+    .feed-score {{ color: {MUTED}; font-weight: 500; font-variant-numeric: tabular-nums;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
-    .feed-src {{ color: {MUTED}; font-weight: 500; }}
+    .feed-src {{ color: {MUTED}; font-weight: 400; }}
     .feed-match {{ color: {GOLD}; font-weight: 700; font-size: 0.62rem;
       letter-spacing: 0.05em; text-transform: uppercase; }}
-    .oracle-legend {{ color: {MUTED}; font-size: 0.68rem; margin: 0.1rem 0 0.5rem 0; }}
+    .oracle-legend {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin: 0.1rem 0 0.5rem 0; }}
     .oracle-legend .ld {{ display: inline-block; width: 8px; height: 8px;
       border-radius: 50%; margin: 0 0.25rem 0 0.7rem; }}
-    .tone {{ font-weight: 700; font-size: 0.8rem; margin-top: 0.15rem; }}
+    .tone {{ font-weight: 500; font-size: 0.85rem; margin-top: 0.15rem; }}
     .okv-list {{ margin-top: 0.5rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
-    .okv {{ display: flex; justify-content: space-between; font-size: 0.7rem; padding: 0.13rem 0; }}
+    .okv {{ display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 400; padding: 0.13rem 0; }}
     .okv .k {{ color: {MUTED}; letter-spacing: 0.02em; }}
-    .okv .v {{ color: {TEXT}; font-weight: 600; }}
+    .okv .v {{ color: {TEXT}; font-weight: 500; }}
   </style>
   """, unsafe_allow_html=True)
 
@@ -1071,7 +1094,7 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
   with c2:
     if result.get("summary"):
       st.markdown(
-        f'<div class="news"><b style="color:{ACCENT2}">Oracle read:</b> {esc(result["summary"])}</div>',
+        f'<div class="news"><b style="color:{TEXT}">Oracle read:</b> {esc(result["summary"])}</div>',
         unsafe_allow_html=True,
       )
 
