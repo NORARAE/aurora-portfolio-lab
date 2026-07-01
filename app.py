@@ -149,27 +149,22 @@ st.markdown(f"""
     color: {TEXT}; border-radius: 10px; font-size: 0.72rem; font-weight: 600; padding: 0.18rem 0; }}
   [data-testid="stSidebar"] .stButton button:hover {{ border-color: {ACCENT}; color: {ACCENT2}; }}
 
-  [data-testid="stExpander"] details {{
-    background: {SURFACE2};
+  /* Minimal always-visible controls indicator (first popover in main body). */
+  [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 11px;
     border: 1px solid {BORDER};
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 0.58rem;
+    background: {SURFACE2};
+    padding: 0;
   }}
-  [data-testid="stExpander"] details > summary {{
-    min-height: 44px;
-    padding: 0.5rem 0.7rem;
-    color: {TEXT};
-    font-weight: 700;
-    letter-spacing: 0.01em;
-  }}
-  [data-testid="stExpander"] details > summary p {{
+  [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type [data-testid="stMarkdownContainer"] p {{
     margin: 0;
-    font-size: 0.82rem;
-    color: {TEXT};
-  }}
-  .controls-star {{
+    font-size: 1.02rem;
     font-weight: 800;
+    line-height: 1;
     background: linear-gradient(90deg, {ACCENT}, {ACCENT2});
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -184,15 +179,10 @@ st.markdown(f"""
     .hero {{ padding: 0.95rem 0.92rem 0.44rem 0.92rem; }}
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     .stat-value {{ font-size: 1.16rem; }}
-
-    [data-testid="stExpander"] details > summary {{
-      min-height: 44px;
-    }}
   }}
 
   @media (prefers-reduced-motion: reduce) {{
-    [data-testid="stExpander"] details,
-    [data-testid="stExpander"] details > summary {{
+    [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
       transition: none !important;
       animation: none !important;
     }}
@@ -349,12 +339,20 @@ def rebalance_pct(changed_ticker: str, tickers: tuple[str, ...]):
       st.session_state[f"pct_{t}"] = v
 
 
+def sync_widget_to_state(widget_key: str, state_key: str):
+    """Copy an auxiliary widget value into the shared session_state source of truth."""
+    st.session_state[state_key] = st.session_state.get(widget_key)
+
+
 # ----------------------------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------------------------
 if "tickers_text" not in st.session_state:
     st.session_state.tickers_text = "AAPL, MSFT, NVDA"
 st.session_state.setdefault("invested", 10_000)   # master portfolio amount ($)
+st.session_state.setdefault("savings_apy", 0.04)
+st.session_state.setdefault("inflation", 0.038)
+st.session_state.setdefault("rf", 0.04)
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
@@ -458,11 +456,17 @@ with st.sidebar:
         st.caption("Give a holding a non-zero share to build the portfolio.")
 
     st.markdown('<div class="section">Benchmarks & assumptions</div>', unsafe_allow_html=True)
-    savings_apy = st.slider("High-yield savings APY", 0.0, 0.08, 0.04, 0.005,
+    savings_apy = st.slider("High-yield savings APY", 0.0, 0.08,
+                float(st.session_state.get("savings_apy", 0.04)), 0.005,
+                key="savings_apy",
                             help="The 'safe' alternative your portfolio is compared against.")
-    inflation = st.slider("Annual inflation", 0.0, 0.10, 0.038, 0.002,
+    inflation = st.slider("Annual inflation", 0.0, 0.10,
+                float(st.session_state.get("inflation", 0.038)), 0.002,
+                key="inflation",
                           help="Used to show real, inflation-adjusted returns. ~3.8% recently.")
-    rf = st.slider("Risk-free rate (Sharpe)", 0.0, 0.08, 0.04, 0.005)
+    rf = st.slider("Risk-free rate (Sharpe)", 0.0, 0.08,
+             float(st.session_state.get("rf", 0.04)), 0.005,
+             key="rf")
 
     st.markdown('<div class="section">Display</div>', unsafe_allow_html=True)
     show_real = st.toggle("Show inflation-adjusted line", value=False)
@@ -478,8 +482,62 @@ with st.sidebar:
 # ----------------------------------------------------------------------------
 # HEADER
 # ----------------------------------------------------------------------------
-with st.expander("✦ Controls & filters  ▾", expanded=False):
-  st.caption("Open the ‹ arrow at top-left to adjust tickers, weights, and assumptions")
+st.session_state["mini_tickers_text"] = st.session_state.get("tickers_text", "")
+st.session_state["mini_invested"] = int(st.session_state.get("invested", 10_000))
+st.session_state["mini_savings_apy"] = float(st.session_state.get("savings_apy", 0.04))
+st.session_state["mini_inflation"] = float(st.session_state.get("inflation", 0.038))
+st.session_state["mini_rf"] = float(st.session_state.get("rf", 0.04))
+
+ctl_col, _ = st.columns([1, 18])
+with ctl_col:
+  with st.popover("✦"):
+    st.caption("Controls")
+    st.text_input(
+      "Tickers (stocks or crypto)",
+      key="mini_tickers_text",
+      on_change=sync_widget_to_state,
+      args=("mini_tickers_text", "tickers_text"),
+    )
+    st.number_input(
+      "Hypothetical investment ($)",
+      min_value=500,
+      max_value=1_000_000,
+      step=500,
+      key="mini_invested",
+      format="%d",
+      on_change=sync_widget_to_state,
+      args=("mini_invested", "invested"),
+    )
+    st.slider(
+      "High-yield savings APY",
+      0.0,
+      0.08,
+      float(st.session_state.get("mini_savings_apy", 0.04)),
+      0.005,
+      key="mini_savings_apy",
+      on_change=sync_widget_to_state,
+      args=("mini_savings_apy", "savings_apy"),
+    )
+    st.slider(
+      "Annual inflation",
+      0.0,
+      0.10,
+      float(st.session_state.get("mini_inflation", 0.038)),
+      0.002,
+      key="mini_inflation",
+      on_change=sync_widget_to_state,
+      args=("mini_inflation", "inflation"),
+    )
+    st.slider(
+      "Risk-free rate (Sharpe)",
+      0.0,
+      0.08,
+      float(st.session_state.get("mini_rf", 0.04)),
+      0.005,
+      key="mini_rf",
+      on_change=sync_widget_to_state,
+      args=("mini_rf", "rf"),
+    )
 
 h1, h2 = st.columns([3, 2])
 with h1:
