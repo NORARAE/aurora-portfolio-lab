@@ -154,25 +154,37 @@ st.markdown(f"""
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
+    width: 92px;
     height: 40px;
-    min-width: 40px;
+    min-width: 92px;
     min-height: 40px;
     border-radius: 11px;
     border: 1px solid {BORDER};
     background: {SURFACE2};
-    padding: 0;
+    padding: 0 0.45rem;
   }}
   [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type [data-testid="stMarkdownContainer"] p {{
     margin: 0;
-    font-size: 1.02rem;
+    font-size: 0.82rem;
     font-weight: 800;
     line-height: 1;
+    letter-spacing: 0.01em;
     background: linear-gradient(90deg, {ACCENT}, {ACCENT2});
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     color: transparent;
+  }}
+  .menu-group-title {{
+    color: {MUTED};
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    margin: 0.2rem 0 0.42rem 0;
+  }}
+  .menu-spacer {{
+    height: 0.45rem;
   }}
 
   /* Phone tuning */
@@ -347,6 +359,12 @@ def sync_widget_to_state(widget_key: str, state_key: str):
     st.session_state[state_key] = st.session_state.get(widget_key)
 
 
+def sync_pct_and_rebalance(widget_key: str, state_key: str, changed_ticker: str, tickers: tuple[str, ...]):
+  """Sync a mini percent slider into canonical state, then rebalance to keep total at 100."""
+  st.session_state[state_key] = st.session_state.get(widget_key)
+  rebalance_pct(changed_ticker, tickers)
+
+
 # ----------------------------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------------------------
@@ -356,6 +374,9 @@ st.session_state.setdefault("invested", 10_000)   # master portfolio amount ($)
 st.session_state.setdefault("savings_apy", 0.04)
 st.session_state.setdefault("inflation", 0.038)
 st.session_state.setdefault("rf", 0.04)
+st.session_state.setdefault("show_real", False)
+st.session_state.setdefault("run_sentiment", True)
+st.session_state.setdefault("use_source_weighting", True)
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
@@ -472,11 +493,11 @@ with st.sidebar:
              key="rf")
 
     st.markdown('<div class="section">Display</div>', unsafe_allow_html=True)
-    show_real = st.toggle("Show inflation-adjusted line", value=False)
-    run_sentiment = st.toggle("AI news sentiment", value=True)
+    show_real = st.toggle("Show inflation-adjusted line", key="show_real")
+    run_sentiment = st.toggle("AI news sentiment", key="run_sentiment")
     use_source_weighting = st.toggle(
       "Source credibility weighting",
-      value=True,
+      key="use_source_weighting",
       help="Applies light source-trust weights to headline sentiment before averaging.",
       disabled=not run_sentiment,
     )
@@ -490,55 +511,160 @@ st.session_state["mini_invested"] = int(st.session_state.get("invested", 10_000)
 st.session_state["mini_savings_apy"] = float(st.session_state.get("savings_apy", 0.04))
 st.session_state["mini_inflation"] = float(st.session_state.get("inflation", 0.038))
 st.session_state["mini_rf"] = float(st.session_state.get("rf", 0.04))
+st.session_state["mini_alloc_mode"] = st.session_state.get("alloc_mode", "% weight")
+st.session_state["mini_show_real"] = bool(st.session_state.get("show_real", False))
+st.session_state["mini_run_sentiment"] = bool(st.session_state.get("run_sentiment", True))
+st.session_state["mini_use_source_weighting"] = bool(st.session_state.get("use_source_weighting", True))
 
-with st.popover("✦"):
-    st.caption("Full controls in the sidebar (‹ top-left)")
+for _t in tickers:
+    st.session_state[f"mini_pct_{_t}"] = int(st.session_state.get(f"pct_{_t}", 0))
+    st.session_state[f"mini_amt_{_t}"] = float(st.session_state.get(f"amt_{_t}", 0.0))
+
+with st.popover("✦ Menu"):
+    st.caption("Adjust your portfolio — changes apply instantly.")
+
+    st.markdown('<div class="menu-group-title">Assets</div>', unsafe_allow_html=True)
     st.text_input(
-      "Tickers (stocks or crypto)",
-      key="mini_tickers_text",
-      on_change=sync_widget_to_state,
-      args=("mini_tickers_text", "tickers_text"),
+        "Tickers (stocks or crypto)",
+        key="mini_tickers_text",
+        on_change=sync_widget_to_state,
+        args=("mini_tickers_text", "tickers_text"),
     )
+    qcols_mini = st.columns(3)
+    for i, (sym, lbl) in enumerate(quick):
+        qcols_mini[i % 3].button(
+            lbl,
+            key=f"mini_add_{sym}",
+            on_click=add_ticker,
+            args=(sym,),
+            width="stretch",
+        )
+
+    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="menu-group-title">Allocation</div>', unsafe_allow_html=True)
     st.number_input(
-      "Hypothetical investment ($)",
-      min_value=500,
-      max_value=1_000_000,
-      step=500,
-      key="mini_invested",
-      format="%d",
-      on_change=sync_widget_to_state,
-      args=("mini_invested", "invested"),
+        "Hypothetical investment ($)",
+        min_value=500,
+        max_value=1_000_000,
+        step=500,
+        key="mini_invested",
+        format="%d",
+        on_change=sync_widget_to_state,
+        args=("mini_invested", "invested"),
     )
-    st.slider(
-      "High-yield savings APY",
-      0.0,
-      0.08,
-      float(st.session_state.get("mini_savings_apy", 0.04)),
-      0.005,
-      key="mini_savings_apy",
-      on_change=sync_widget_to_state,
-      args=("mini_savings_apy", "savings_apy"),
+    pop_alloc_mode = st.segmented_control(
+        "Allocation mode",
+        ["% weight", "$ amount"],
+        key="mini_alloc_mode",
+        default=st.session_state.get("mini_alloc_mode", "% weight"),
+        on_change=sync_widget_to_state,
+        args=("mini_alloc_mode", "alloc_mode"),
+        label_visibility="collapsed",
+    ) or st.session_state.get("mini_alloc_mode", "% weight")
+    st.button(
+        "⚖ Equalize",
+        key="mini_equalize",
+        on_click=equalize_alloc,
+        args=(tickers, st.session_state.get("alloc_mode", "% weight")),
+        width="stretch",
     )
-    st.slider(
-      "Annual inflation",
-      0.0,
-      0.10,
-      float(st.session_state.get("mini_inflation", 0.038)),
-      0.002,
-      key="mini_inflation",
-      on_change=sync_widget_to_state,
-      args=("mini_inflation", "inflation"),
-    )
-    st.slider(
-      "Risk-free rate (Sharpe)",
-      0.0,
-      0.08,
-      float(st.session_state.get("mini_rf", 0.04)),
-      0.005,
-      key="mini_rf",
-      on_change=sync_widget_to_state,
-      args=("mini_rf", "rf"),
-    )
+
+    if pop_alloc_mode == "$ amount":
+        st.caption("Dollars set the ratio between holdings — scaled to fit your investment.")
+        for t in tickers:
+            st.number_input(
+                label(t),
+                min_value=0,
+                step=100,
+                key=f"mini_amt_{t}",
+                format="%d",
+                on_change=sync_widget_to_state,
+                args=(f"mini_amt_{t}", f"amt_{t}"),
+            )
+        pop_weights = {t: float(st.session_state.get(f"mini_amt_{t}", 0.0)) for t in tickers}
+    else:
+        st.caption("Percent in each holding (auto-balances to 100%).")
+        for t in tickers:
+            st.slider(
+                label(t),
+                0,
+                100,
+                key=f"mini_pct_{t}",
+                format="%d%%",
+                on_change=sync_pct_and_rebalance,
+                args=(f"mini_pct_{t}", f"pct_{t}", t, tuple(tickers)),
+            )
+        pop_weights = {t: float(st.session_state.get(f"mini_pct_{t}", 0)) / 100.0 for t in tickers}
+
+    pop_total_w = sum(pop_weights.values())
+    if pop_total_w > 0:
+        seg = [ACCENT2, ACCENT, GOLD, UP, "#e879f9", "#60a5fa"]
+        ordered = sorted(pop_weights.items(), key=lambda kv: -kv[1])
+        pop_bar = ('<div style="display:flex;height:8px;border-radius:6px;'
+                   'overflow:hidden;margin:0.15rem 0 0.55rem 0;">')
+        pop_recap = ""
+        pop_amount = float(st.session_state.get("invested", 10_000))
+        for i, (t, w) in enumerate(ordered):
+            share = w / pop_total_w
+            color = seg[i % len(seg)]
+            pop_bar += f'<div style="width:{share*100:.4f}%;background:{color};"></div>'
+            pop_recap += (f'<div style="display:flex;justify-content:space-between;'
+                          f'font-size:0.76rem;padding:0.1rem 0;">'
+                          f'<span style="color:{TEXT};">{esc(label(t))}</span>'
+                          f'<span style="color:{MUTED};">{share*100:.0f}% · {money(pop_amount*share)}</span></div>')
+        st.markdown(pop_bar + '</div>' + pop_recap, unsafe_allow_html=True)
+
+    with st.expander("Advanced assumptions", expanded=False):
+        st.slider(
+            "High-yield savings APY",
+            0.0,
+            0.08,
+            float(st.session_state.get("mini_savings_apy", 0.04)),
+            0.005,
+            key="mini_savings_apy",
+            on_change=sync_widget_to_state,
+            args=("mini_savings_apy", "savings_apy"),
+        )
+        st.slider(
+            "Annual inflation",
+            0.0,
+            0.10,
+            float(st.session_state.get("mini_inflation", 0.038)),
+            0.002,
+            key="mini_inflation",
+            on_change=sync_widget_to_state,
+            args=("mini_inflation", "inflation"),
+        )
+        st.slider(
+            "Risk-free rate (Sharpe)",
+            0.0,
+            0.08,
+            float(st.session_state.get("mini_rf", 0.04)),
+            0.005,
+            key="mini_rf",
+            on_change=sync_widget_to_state,
+            args=("mini_rf", "rf"),
+        )
+        st.toggle(
+          "Show inflation-adjusted line",
+          key="mini_show_real",
+          on_change=sync_widget_to_state,
+          args=("mini_show_real", "show_real"),
+        )
+        st.toggle(
+          "AI news sentiment",
+          key="mini_run_sentiment",
+          on_change=sync_widget_to_state,
+          args=("mini_run_sentiment", "run_sentiment"),
+        )
+        st.toggle(
+          "Source credibility weighting",
+          key="mini_use_source_weighting",
+          on_change=sync_widget_to_state,
+          args=("mini_use_source_weighting", "use_source_weighting"),
+          disabled=not st.session_state.get("mini_run_sentiment", True),
+        )
+    st.caption("Full controls in the sidebar (‹ top-left)")
 
 h1, h2 = st.columns([3, 2])
 with h1:
