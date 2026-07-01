@@ -151,6 +151,7 @@ st.markdown(f"""
 
   /* Minimal always-visible controls indicator (first popover in main body). */
   [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
+    display: none;
     width: 40px;
     height: 40px;
     min-width: 40px;
@@ -179,6 +180,12 @@ st.markdown(f"""
     .hero {{ padding: 0.95rem 0.92rem 0.44rem 0.92rem; }}
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     .stat-value {{ font-size: 1.16rem; }}
+
+    [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }}
   }}
 
   @media (prefers-reduced-motion: reduce) {{
@@ -488,9 +495,7 @@ st.session_state["mini_savings_apy"] = float(st.session_state.get("savings_apy",
 st.session_state["mini_inflation"] = float(st.session_state.get("inflation", 0.038))
 st.session_state["mini_rf"] = float(st.session_state.get("rf", 0.04))
 
-ctl_col, _ = st.columns([1, 18])
-with ctl_col:
-  with st.popover("✦"):
+with st.popover("✦"):
     st.caption("Controls")
     st.text_input(
       "Tickers (stocks or crypto)",
@@ -667,11 +672,8 @@ st.markdown(f"""
 # ----------------------------------------------------------------------------
 # STAT CARDS (responsive grid)
 # ----------------------------------------------------------------------------
-sh1, sh2 = st.columns([5, 1])
-with sh1:
-  st.markdown('<div class="section" style="margin-top:0.4rem">Risk & quality snapshot</div>', unsafe_allow_html=True)
-with sh2:
-  with st.popover("Metric guide"):
+st.markdown('<div class="section" style="margin-top:0.4rem">Risk & quality snapshot</div>', unsafe_allow_html=True)
+with st.popover("Metric guide"):
     st.markdown("""
 **How to read these**
 
