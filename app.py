@@ -123,11 +123,14 @@ st.markdown(f"""
   }}
   [data-testid="stMain"] [data-testid="stPopoverButton"] {{
     min-height: 32px;
+    width: auto;
+    min-width: fit-content;
+    height: auto;
     border-radius: 10px;
     border: 1px solid {BORDER};
     background: {SURFACE};
     color: {MUTED};
-    padding: 0.18rem 0.48rem;
+    padding: 0.2rem 0.62rem;
   }}
   [data-testid="stMain"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] p {{
     font-size: 0.7rem;
@@ -183,6 +186,17 @@ st.markdown(f"""
     max-width: 420px;
     max-height: 60vh;
     padding: 0.9rem 1rem;
+    border-width: 0.6px;
+  }}
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) > div {{
+    background: transparent !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-height: none !important;
+  }}
+  [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stVerticalBlock"] {{
+    gap: 0;
   }}
   [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] p,
   [data-testid="stPopoverBody"]:has(ol):not(:has([data-testid="stSlider"])) [data-testid="stMarkdownContainer"] li {{
@@ -204,31 +218,11 @@ st.markdown(f"""
     color: {TEXT}; border-radius: 10px; font-size: 0.72rem; font-weight: 600; padding: 0.18rem 0; }}
   [data-testid="stSidebar"] .stButton button:hover {{ border-color: {ACCENT}; color: {ACCENT2}; }}
 
-  /* Minimal always-visible controls indicator (first popover in main body). */
-  [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 92px;
-    height: 40px;
-    min-width: 92px;
-    min-height: 40px;
-    border-radius: 11px;
-    border: 1px solid {BORDER};
-    background: {SURFACE2};
-    padding: 0 0.45rem;
-  }}
-  [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type [data-testid="stMarkdownContainer"] p {{
+  /* Keep popover labels readable and avoid clipping on narrow controls. */
+  [data-testid="stMain"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] p {{
     margin: 0;
-    font-size: 0.82rem;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: 0.01em;
-    background: linear-gradient(90deg, {ACCENT}, {ACCENT2});
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    color: transparent;
+    white-space: nowrap;
+    overflow: visible;
   }}
   .menu-group-title {{
     color: {MUTED};
@@ -252,7 +246,7 @@ st.markdown(f"""
   }}
 
   @media (prefers-reduced-motion: reduce) {{
-    [data-testid="stMain"] [data-testid="stPopoverButton"]:first-of-type {{
+    [data-testid="stMain"] [data-testid="stPopoverButton"] {{
       transition: none !important;
       animation: none !important;
     }}
@@ -340,6 +334,19 @@ def add_ticker(sym: str):
     if sym not in cur:
         cur.append(sym)
         st.session_state.tickers_text = ", ".join(cur)
+
+
+def remove_ticker(sym: str):
+  """Callback for quick-remove chips in the Holdings area."""
+  cur = [t.strip().upper() for t in st.session_state.get("tickers_text", "").split(",") if t.strip()]
+  nxt = [t for t in cur if t != sym]
+  st.session_state.tickers_text = ", ".join(nxt)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def ticker_logo_url(ticker: str) -> str | None:
+  """Use local monogram fallback badges for stable, dependency-free icons."""
+  return None
 
 
 def equalize_alloc(tickers: list[str], mode: str):
@@ -432,6 +439,16 @@ st.session_state.setdefault("rf", 0.04)
 st.session_state.setdefault("show_real", False)
 st.session_state.setdefault("run_sentiment", True)
 st.session_state.setdefault("use_source_weighting", True)
+
+# Consume inline holdings remove requests before tickers_text widget is instantiated.
+rm_req = str(st.query_params.get("rm", "")).strip().upper()
+if rm_req:
+  remove_ticker(rm_req)
+  try:
+    del st.query_params["rm"]
+  except Exception:
+    st.query_params.clear()
+  st.rerun()
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
@@ -925,7 +942,20 @@ color_for = {t: ALLOC_COLORS[i % len(ALLOC_COLORS)] for i, (t, _) in enumerate(r
 st.markdown(f"""
 <style>
   .holding {{ gap: 0.7rem; }}
-  .h-name {{ min-width: 54px; font-weight: 700; font-size: 0.9rem; color: {TEXT}; }}
+  .h-name {{ min-width: 54px; font-weight: 700; font-size: 0.9rem; color: {TEXT};
+    display: inline-flex; align-items: center; gap: 0.42rem; }}
+  .h-remove {{ width: 16px; height: 16px; border-radius: 50%; border: 1px solid {BORDER};
+    background: {SURFACE2}; color: {MUTED}; font-size: 0.66rem; font-weight: 700;
+    line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+    text-decoration: none; flex: none; }}
+  .h-remove:hover {{ color: {TEXT}; border-color: rgba(255,255,255,0.2); }}
+  .h-icon-wrap {{ position: relative; width: 16px; height: 16px; display: inline-flex;
+    align-items: center; justify-content: center; flex: none; }}
+  .h-icon {{ width: 16px; height: 16px; border-radius: 50%; object-fit: cover;
+    border: 1px solid {BORDER}; background: {SURFACE2}; flex: none; }}
+  .h-icon-fallback {{ width: 16px; height: 16px; border-radius: 50%; border: 1px solid {BORDER};
+    background: {SURFACE2}; color: {TEXT}; font-size: 0.56rem; font-weight: 700;
+    line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
   .h-bar {{ flex: 1; height: 6px; background: rgba(255,255,255,0.06);
     border-radius: 4px; overflow: hidden; }}
   .h-bar-fill {{ height: 100%; border-radius: 4px; }}
@@ -937,19 +967,44 @@ st.markdown(f"""
 
 hcol1, hcol2 = st.columns([1.7, 1], gap="medium")
 with hcol1:
-    rows = ""
+    st.caption("Quick add")
+    hold_add = [("BTC-USD", "+ BTC"), ("ETH-USD", "+ ETH"), ("SPY", "+ SPY"),
+                ("TSLA", "+ TSLA"), ("AMZN", "+ AMZN"), ("GOOGL", "+ GOOGL")]
+    add_cols = st.columns(3)
+    for i, (sym, lbl) in enumerate(hold_add):
+        add_cols[i % 3].button(
+            lbl,
+            key=f"hold_add_{sym}",
+            on_click=add_ticker,
+            args=(sym,),
+            width="stretch",
+        )
+
+        rows = ""
     for t, r in ranked:
         w = weights.get(t, 0) / hold_total_w
         cls = "up-t" if r >= 0 else "down-t"
-        rows += (
-            f'<div class="holding">'
-            f'<div class="h-name">{esc(label(t))}</div>'
-            f'<div class="h-bar"><div class="h-bar-fill" '
-            f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
-            f'<div class="h-share">{w*100:.0f}%</div>'
-            f'<div class="h-ret {cls}">{pct(r)}</div>'
-            f'</div>'
+        icon_url = ticker_logo_url(t)
+        fallback = esc(label(t)[:1])
+        img_display = "inline-block" if icon_url else "none"
+        fb_display = "none" if icon_url else "inline-flex"
+        icon_html = (
+            f'<span class="h-icon-wrap">'
+            f'<img class="h-icon" src="{esc(icon_url or "")}" alt="{esc(label(t))} logo" '
+          f'loading="lazy" referrerpolicy="no-referrer" style="display:{img_display};" />'
+            f'<span class="h-icon-fallback" style="display:{fb_display};">{fallback}</span>'
+            f'</span>'
         )
+        rows += (
+          f'<div class="holding">'
+          f'<div class="h-name"><a class="h-remove" href="?rm={esc(t)}" title="Remove {esc(label(t))}">x</a>{icon_html}<span>{esc(label(t))}</span></div>'
+          f'<div class="h-bar"><div class="h-bar-fill" '
+          f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
+          f'<div class="h-share">{w*100:.0f}%</div>'
+          f'<div class="h-ret {cls}">{pct(r)}</div>'
+          f'</div>'
+        )
+
     st.markdown(rows, unsafe_allow_html=True)
 with hcol2:
     donut = go.Figure(go.Pie(
