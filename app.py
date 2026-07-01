@@ -149,6 +149,34 @@ st.markdown(f"""
     color: {TEXT}; border-radius: 10px; font-size: 0.72rem; font-weight: 600; padding: 0.18rem 0; }}
   [data-testid="stSidebar"] .stButton button:hover {{ border-color: {ACCENT}; color: {ACCENT2}; }}
 
+  [data-testid="stExpander"] details {{
+    background: {SURFACE2};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 0.58rem;
+  }}
+  [data-testid="stExpander"] details > summary {{
+    min-height: 44px;
+    padding: 0.5rem 0.7rem;
+    color: {TEXT};
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }}
+  [data-testid="stExpander"] details > summary p {{
+    margin: 0;
+    font-size: 0.82rem;
+    color: {TEXT};
+  }}
+  .controls-star {{
+    font-weight: 800;
+    background: linear-gradient(90deg, {ACCENT}, {ACCENT2});
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }}
+
   /* Phone tuning */
   @media (max-width: 640px) {{
     html {{ font-size: 13px; }}
@@ -157,68 +185,16 @@ st.markdown(f"""
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     .stat-value {{ font-size: 1.16rem; }}
 
-    /* Native Streamlit sidebar toggle (verified selector for this version). */
-    [data-testid="stSidebarCollapseButton"] {{
-      position: relative;
-      z-index: 30;
-    }}
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] {{
-      min-width: 44px;
+    [data-testid="stExpander"] details > summary {{
       min-height: 44px;
-      width: 44px;
-      height: 44px;
-      padding: 0;
-      border-radius: 12px;
-      background: {SURFACE2};
-      border: 1px solid {ACCENT};
-      color: {TEXT};
-      box-shadow: 0 0 0 0 rgba(139,123,247,0.35);
-      animation: auroraSidebarPulse 2.1s ease-in-out infinite;
-    }}
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] [data-testid="stIconMaterial"] {{
-      opacity: 0;
-    }}
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]::before {{
-      content: "✦";
-      position: absolute;
-      left: 14px;
-      top: 8px;
-      font-size: 1.05rem;
-      font-weight: 800;
-      line-height: 1;
-      background: linear-gradient(135deg, {ACCENT}, {ACCENT2});
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      color: transparent;
-    }}
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]::after {{
-      content: "Filters";
-      position: absolute;
-      left: 34px;
-      top: 11px;
-      font-size: 0.66rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      color: {MUTED};
-      text-transform: uppercase;
-      pointer-events: none;
-    }}
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]:focus-visible {{
-      outline: 2px solid {ACCENT2};
-      outline-offset: 2px;
     }}
   }}
 
-  @keyframes auroraSidebarPulse {{
-    0% {{ box-shadow: 0 0 0 0 rgba(139,123,247,0.34); }}
-    70% {{ box-shadow: 0 0 0 10px rgba(139,123,247,0.00); }}
-    100% {{ box-shadow: 0 0 0 0 rgba(139,123,247,0.00); }}
-  }}
-
-  @media (max-width: 640px) and (prefers-reduced-motion: reduce) {{
-    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] {{
-      animation: none;
+  @media (prefers-reduced-motion: reduce) {{
+    [data-testid="stExpander"] details,
+    [data-testid="stExpander"] details > summary {{
+      transition: none !important;
+      animation: none !important;
     }}
   }}
 
@@ -373,36 +349,12 @@ def rebalance_pct(changed_ticker: str, tickers: tuple[str, ...]):
       st.session_state[f"pct_{t}"] = v
 
 
-def open_invest_modal():
-    """Reopen the investment dialog (button callback)."""
-    st.session_state.force_open_invest_modal = True
-
-
-@st.dialog("Set your investment")
-def investment_dialog():
-    """First-visit (and on-demand) modal for the master investment amount — the
-    single source of truth the whole dashboard scales from. It's 'play money':
-    set it here, then nudge it live with the slider on the page."""
-    st.write("How much are you putting to work? It's play money — you can slide "
-             "it around on the dashboard anytime.")
-    v = st.number_input("Amount ($)", min_value=500, max_value=1_000_000,
-                        value=int(st.session_state.get("invested", 10_000)), step=500)
-    if st.button("Start investing →", type="primary", width="stretch"):
-        st.session_state.invested = int(v)
-        st.session_state.invest_set = True
-        st.session_state.invest_prompt_seen = True
-        st.rerun()
-
-
 # ----------------------------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------------------------
 if "tickers_text" not in st.session_state:
     st.session_state.tickers_text = "AAPL, MSFT, NVDA"
 st.session_state.setdefault("invested", 10_000)   # master portfolio amount ($)
-st.session_state.setdefault("invest_set", False)
-st.session_state.setdefault("invest_prompt_seen", False)
-st.session_state.setdefault("force_open_invest_modal", False)
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
@@ -430,6 +382,15 @@ with st.sidebar:
     # way portfolio_series() normalizes it, so the math downstream is identical
     # — this block only needs to produce `weights` (dict) and `amount` (float).
     st.markdown('<div class="section">Investment & allocation</div>', unsafe_allow_html=True)
+    st.number_input(
+      "Hypothetical investment ($)",
+      min_value=500,
+      max_value=1_000_000,
+      step=500,
+      key="invested",
+      format="%d",
+      help="This is the single investment input used across the dashboard.",
+    )
     alloc_mode = st.segmented_control(
         "Allocation mode", ["% weight", "$ amount"],
         default="% weight", key="alloc_mode", label_visibility="collapsed") or "% weight"
@@ -517,6 +478,9 @@ with st.sidebar:
 # ----------------------------------------------------------------------------
 # HEADER
 # ----------------------------------------------------------------------------
+with st.expander("✦ Controls & filters  ▾", expanded=False):
+  st.caption("Open the ‹ arrow at top-left to adjust tickers, weights, and assumptions")
+
 h1, h2 = st.columns([3, 2])
 with h1:
     st.markdown('<div class="brand"><span class="mark">✦ Aurora</span> Portfolio Lab</div>',
@@ -541,29 +505,6 @@ if full.empty:
 missing = [t for t in tickers if t not in full.columns]
 if missing:
     st.warning(f"No data for: {', '.join(missing)} — skipping. (Crypto needs -USD, e.g. ETH-USD.)")
-
-# ----------------------------------------------------------------------------
-# INVESTMENT — the master amount. Modal onboarding + a live "play money" slider.
-# This single value is what the whole dashboard scales from.
-# ----------------------------------------------------------------------------
-if st.session_state.pop("force_open_invest_modal", False):
-  investment_dialog()          # explicit on-demand open from the ✎ Edit button
-elif (not st.session_state.get("invest_set")) and (not st.session_state.get("invest_prompt_seen")):
-  st.session_state.invest_prompt_seen = True
-  investment_dialog()          # first visit only
-
-st.markdown('<div class="section" style="margin-bottom:0.25rem">'
-            'Investment · slide to explore</div>', unsafe_allow_html=True)
-# Let the slider's ceiling grow if the modal set a bigger number, so it never
-# clamps a valid amount (Streamlit errors if a value exceeds the slider max).
-inv_max = max(100_000, int(st.session_state.get("invested", 10_000)))
-iv1, iv2 = st.columns([5, 1])
-with iv1:
-    st.slider("Investment", min_value=500, max_value=inv_max, step=500,
-              key="invested", label_visibility="collapsed")
-with iv2:
-    st.button("✎ Edit", on_click=open_invest_modal, width="stretch",
-              help="Type an exact amount.")
 
 # ----------------------------------------------------------------------------
 # RANGE + CORE SERIES
