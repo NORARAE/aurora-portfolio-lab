@@ -15,6 +15,7 @@ Math lives in finance_metrics.py, AI in sentiment.py. This file is UI + flow.
 
 import datetime as dt
 import html
+import io
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -32,6 +33,10 @@ BORDER   = "rgba(255,255,255,0.07)"; TEXT = "#edeef4"; MUTED = "#8b8ca6"
 UP       = "#16c784"; DOWN = "#ea3943"
 ACCENT   = "#8b7bf7"; ACCENT2 = "#4de1d0"; GOLD = "#f5c451"
 
+# Slice/segment palette for allocation visuals (donut + holdings bars).
+# Reuses existing tokens only — introduces no new colors.
+ALLOC_COLORS = [ACCENT, ACCENT2, GOLD, UP]
+
 st.markdown(f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -43,10 +48,12 @@ st.markdown(f"""
       {BG};
     color: {TEXT};
   }}
+  html {{ font-size: 14px; }}
   html, body, [class*="css"], .stMarkdown, p, span, div {{
     font-family: 'Inter', -apple-system, system-ui, sans-serif;
     font-feature-settings: 'tnum';
   }}
+  body {{ line-height: 1.45; }}
   #MainMenu, footer, header {{ visibility: hidden; }}
   .block-container {{ padding-top: 1.05rem; padding-bottom: 1.75rem; max-width: 1120px; }}
 
@@ -113,6 +120,29 @@ st.markdown(f"""
     letter-spacing: 0.014em;
     line-height: 1.36;
   }}
+  [data-testid="stPopoverButton"] {{
+    font-size: 0.66rem;
+    letter-spacing: 0.01em;
+  }}
+  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] p,
+  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] li {{
+    font-size: 0.7rem;
+    line-height: 1.25;
+    margin: 0.08rem 0;
+  }}
+  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] ul,
+  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] ol {{
+    margin: 0.2rem 0 0.35rem 0;
+    padding-left: 1rem;
+  }}
+  [data-testid="stPopover"] [data-testid="stMarkdownContainer"] strong {{
+    letter-spacing: 0.01em;
+  }}
+  [data-testid="stPopover"] .stVerticalBlock {{
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }}
 
   section[data-testid="stSidebar"] {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
   [data-testid="stSidebar"] .stButton button {{ background: {SURFACE2}; border: 1px solid {BORDER};
@@ -121,10 +151,75 @@ st.markdown(f"""
 
   /* Phone tuning */
   @media (max-width: 640px) {{
+    html {{ font-size: 13px; }}
     .hero-value {{ font-size: 1.92rem; }}
     .hero {{ padding: 0.95rem 0.92rem 0.44rem 0.92rem; }}
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
     .stat-value {{ font-size: 1.16rem; }}
+
+    /* Native Streamlit sidebar toggle (verified selector for this version). */
+    [data-testid="stSidebarCollapseButton"] {{
+      position: relative;
+      z-index: 30;
+    }}
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] {{
+      min-width: 44px;
+      min-height: 44px;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 12px;
+      background: {SURFACE2};
+      border: 1px solid {ACCENT};
+      color: {TEXT};
+      box-shadow: 0 0 0 0 rgba(139,123,247,0.35);
+      animation: auroraSidebarPulse 2.1s ease-in-out infinite;
+    }}
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] [data-testid="stIconMaterial"] {{
+      opacity: 0;
+    }}
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]::before {{
+      content: "✦";
+      position: absolute;
+      left: 14px;
+      top: 8px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      line-height: 1;
+      background: linear-gradient(135deg, {ACCENT}, {ACCENT2});
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      color: transparent;
+    }}
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]::after {{
+      content: "Filters";
+      position: absolute;
+      left: 34px;
+      top: 11px;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: {MUTED};
+      text-transform: uppercase;
+      pointer-events: none;
+    }}
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"]:focus-visible {{
+      outline: 2px solid {ACCENT2};
+      outline-offset: 2px;
+    }}
+  }}
+
+  @keyframes auroraSidebarPulse {{
+    0% {{ box-shadow: 0 0 0 0 rgba(139,123,247,0.34); }}
+    70% {{ box-shadow: 0 0 0 10px rgba(139,123,247,0.00); }}
+    100% {{ box-shadow: 0 0 0 0 rgba(139,123,247,0.00); }}
+  }}
+
+  @media (max-width: 640px) and (prefers-reduced-motion: reduce) {{
+    [data-testid="stSidebarCollapseButton"] > button[data-testid="stBaseButton-headerNoPadding"] {{
+      animation: none;
+    }}
   }}
 
   @media (max-width: 980px) {{
@@ -180,6 +275,29 @@ def esc(s) -> str:
     return html.escape(str(s), quote=True)
 
 
+def build_export_csv(value_series, savings_series, real_series, per, weights, total_w) -> str:
+    """Assemble a two-section CSV: the portfolio value time-series plus a
+    per-holding return table for the selected window. Presentation-only — it
+    just formats already-computed series, it does no finance math."""
+    buf = io.StringIO()
+    buf.write("# Aurora Portfolio Lab — data export\n")
+    buf.write("# Section 1: portfolio value series\n")
+    pd.DataFrame({
+        "date": value_series.index.strftime("%Y-%m-%d"),
+        "portfolio_value": value_series.round(2).to_numpy(),
+        "savings_benchmark": savings_series.round(2).to_numpy(),
+        "real_value": real_series.round(2).to_numpy(),
+    }).to_csv(buf, index=False)
+    buf.write("\n# Section 2: per-holding return (this window)\n")
+    pd.DataFrame([
+        {"ticker": label(t),
+         "weight_pct": round(weights.get(t, 0) / total_w * 100, 2),
+         "total_return_pct": round(r * 100, 2)}
+        for t, r in sorted(per.items(), key=lambda kv: -(weights.get(kv[0], 0.0)))
+    ]).to_csv(buf, index=False)
+    return buf.getvalue()
+
+
 def add_ticker(sym: str):
     """Callback for quick-add chips (runs before widgets re-instantiate)."""
     cur = [t.strip().upper() for t in st.session_state.get("tickers_text", "").split(",") if t.strip()]
@@ -198,8 +316,61 @@ def equalize_alloc(tickers: list[str], mode: str):
         for t in tickers:
             st.session_state[f"amt_{t}"] = round(total / n)
     else:
+        split = _allocate_int_total({t: 1.0 for t in tickers}, 100)
         for t in tickers:
-            st.session_state[f"pct_{t}"] = round(100 / n)
+            st.session_state[f"pct_{t}"] = split.get(t, 0)
+
+
+def _allocate_int_total(raw: dict[str, float], total: int) -> dict[str, int]:
+    """Convert arbitrary non-negative weights into integer shares summing to `total`.
+    Uses largest-remainder rounding so percent sliders can always sum to 100 exactly."""
+    keys = list(raw.keys())
+    if not keys:
+        return {}
+    clean = {k: max(0.0, float(v)) for k, v in raw.items()}
+    denom = sum(clean.values())
+    if denom <= 0:
+        clean = {k: 1.0 for k in keys}
+        denom = float(len(keys))
+
+    scaled = {k: (clean[k] / denom) * total for k in keys}
+    base = {k: int(scaled[k]) for k in keys}
+    remainder = total - sum(base.values())
+    order = sorted(keys, key=lambda k: (scaled[k] - base[k]), reverse=True)
+    for k in order[:remainder]:
+        base[k] += 1
+    return base
+
+
+def rebalance_pct(changed_ticker: str, tickers: tuple[str, ...]):
+    """Keep percent sliders at an exact 100% total after any single slider move."""
+    symbols = [t for t in tickers if t]
+    if not symbols or changed_ticker not in symbols:
+        return
+
+    changed_key = f"pct_{changed_ticker}"
+    changed_val = int(st.session_state.get(changed_key, 0))
+    changed_val = max(0, min(100, changed_val))
+    st.session_state[changed_key] = changed_val
+
+    others = [t for t in symbols if t != changed_ticker]
+    if not others:
+        st.session_state[changed_key] = 100
+        return
+
+    remaining = 100 - changed_val
+    if remaining <= 0:
+        for t in others:
+            st.session_state[f"pct_{t}"] = 0
+        return
+
+    prev = {t: float(st.session_state.get(f"pct_{t}", 0)) for t in others}
+    if sum(max(0.0, v) for v in prev.values()) <= 0:
+        prev = {t: 1.0 for t in others}
+
+    alloc = _allocate_int_total(prev, remaining)
+    for t, v in alloc.items():
+      st.session_state[f"pct_{t}"] = v
 
 
 def open_invest_modal():
@@ -276,9 +447,21 @@ with st.sidebar:
         weights = dict(dollars)                 # relative amounts; normalized in portfolio_series
     else:
         st.caption("Percent in each holding (auto-balances to 100%).")
+        initial_split = _allocate_int_total({t: 1.0 for t in tickers}, 100)
         for t in tickers:
-            st.session_state.setdefault(f"pct_{t}", round(100 / n_hold))
-        pcts = {t: st.slider(label(t), 0, 100, key=f"pct_{t}", format="%d%%") for t in tickers}
+            st.session_state.setdefault(f"pct_{t}", initial_split.get(t, 0))
+        pcts = {
+            t: st.slider(
+                label(t),
+                0,
+                100,
+                key=f"pct_{t}",
+                format="%d%%",
+                on_change=rebalance_pct,
+                args=(t, tuple(tickers)),
+            )
+            for t in tickers
+        }
         weights = {t: v / 100.0 for t, v in pcts.items()}
 
     # The investment amount is the single source of truth, set on the main page
@@ -307,8 +490,7 @@ with st.sidebar:
 
         if alloc_mode == "% weight":
             entered = sum(int(st.session_state.get(f"pct_{t}", 0)) for t in tickers)
-            st.caption(f"Splitting {money(amount)} · entered {entered}%"
-                       + ("" if entered == 100 else " → auto-balanced to 100%"))
+            st.caption(f"Splitting {money(amount)} · sliders total {entered}% (locked to 100%).")
         else:
             st.caption(f"Splitting {money(amount)} by the ratios above.")
     else:
@@ -552,19 +734,62 @@ st.markdown('<div class="stat-grid">'
     + '</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------
-# HOLDINGS (full width, stacks naturally)
+# HOLDINGS + ALLOCATION DONUT (ranked allocation table beside a weights donut)
 # ----------------------------------------------------------------------------
 st.markdown('<div class="section">Holdings · this window</div>', unsafe_allow_html=True)
 per = fm.per_ticker_returns(view)
-total_w = sum(weights[t] for t in per if t in weights) or 1
-rows = ""
-for t, r in sorted(per.items(), key=lambda kv: -kv[1]):
-    w = weights.get(t, 0) / total_w
-    cls = "up-t" if r >= 0 else "down-t"
-    rows += (f'<div class="holding"><div><div class="tkr">{esc(label(t))}</div>'
-             f'<div class="tkr-sub">{w*100:.0f}% of portfolio</div></div>'
-             f'<div class="stat-value {cls}" style="font-size:1.15rem">{pct(r)}</div></div>')
-st.markdown(rows, unsafe_allow_html=True)
+hold_total_w = sum(weights[t] for t in per if t in weights) or 1
+# Rank by allocation weight so the rows + bars read like a ranked table; assign
+# each holding a stable slice color the donut reuses as a consistent visual key.
+ranked = sorted(per.items(), key=lambda kv: -(weights.get(kv[0], 0.0)))
+color_for = {t: ALLOC_COLORS[i % len(ALLOC_COLORS)] for i, (t, _) in enumerate(ranked)}
+
+st.markdown(f"""
+<style>
+  .holding {{ gap: 0.7rem; }}
+  .h-name {{ min-width: 54px; font-weight: 700; font-size: 0.9rem; color: {TEXT}; }}
+  .h-bar {{ flex: 1; height: 6px; background: rgba(255,255,255,0.06);
+    border-radius: 4px; overflow: hidden; }}
+  .h-bar-fill {{ height: 100%; border-radius: 4px; }}
+  .h-share {{ color: {TEXT}; font-size: 0.78rem; font-weight: 700;
+    min-width: 40px; text-align: right; }}
+  .h-ret {{ font-weight: 800; font-size: 0.98rem; min-width: 76px; text-align: right; }}
+</style>
+""", unsafe_allow_html=True)
+
+hcol1, hcol2 = st.columns([1.7, 1], gap="medium")
+with hcol1:
+    rows = ""
+    for t, r in ranked:
+        w = weights.get(t, 0) / hold_total_w
+        cls = "up-t" if r >= 0 else "down-t"
+        rows += (
+            f'<div class="holding">'
+            f'<div class="h-name">{esc(label(t))}</div>'
+            f'<div class="h-bar"><div class="h-bar-fill" '
+            f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
+            f'<div class="h-share">{w*100:.0f}%</div>'
+            f'<div class="h-ret {cls}">{pct(r)}</div>'
+            f'</div>'
+        )
+    st.markdown(rows, unsafe_allow_html=True)
+with hcol2:
+    donut = go.Figure(go.Pie(
+        labels=[label(t) for t, _ in ranked],
+        values=[weights.get(t, 0) / hold_total_w for t, _ in ranked],
+        hole=0.62, sort=False, direction="clockwise",
+        marker=dict(colors=[color_for[t] for t, _ in ranked], line=dict(color=BG, width=2)),
+        textposition="inside", textinfo="label", insidetextorientation="horizontal",
+        hovertemplate="%{label}<br>%{percent}<extra></extra>",
+    ))
+    donut.update_layout(
+        height=200, margin=dict(l=4, r=4, t=6, b=6),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False, font=dict(color=TEXT, family="Inter", size=11),
+        annotations=[dict(text="ALLOCATION", x=0.5, y=0.5, showarrow=False,
+                          font=dict(color=MUTED, size=9))],
+    )
+    st.plotly_chart(donut, width="stretch", config={"displayModeBar": False})
 
 # ----------------------------------------------------------------------------
 # DRAWDOWN (full width)
@@ -572,10 +797,25 @@ st.markdown(rows, unsafe_allow_html=True)
 st.markdown('<div class="section">Drawdown · depth below prior peak</div>', unsafe_allow_html=True)
 cumret = fm.cumulative_returns(port_growth)
 dd = cumret / cumret.cummax() - 1
+dd_pct = dd * 100
+dd_min = float(dd_pct.min())
+dd_span = abs(dd_min) if dd_min < 0 else 1.0
+# Dynamic vertical framing keeps 0% from hugging the top on shallow drawdowns.
+y_top = max(1.2, dd_span * 0.22)
+y_bottom = min(-1.5, dd_min * 1.12)
+worst_idx = dd_pct.idxmin()
+worst_val = float(dd_pct.loc[worst_idx])
 fig2 = go.Figure()
-fig2.add_trace(go.Scatter(x=dd.index, y=dd * 100, fill="tozeroy",
-    line=dict(color=DOWN, width=1.6), fillcolor="rgba(234,57,67,0.10)",
+fig2.add_trace(go.Scatter(x=dd.index, y=dd_pct, fill="tozeroy",
+  line=dict(color=DOWN, width=1.8), fillcolor="rgba(234,57,67,0.12)",
     hovertemplate="%{x|%b %d, %Y}<br>%{y:.1f}%<extra></extra>"))
+fig2.add_trace(go.Scatter(
+  x=[worst_idx], y=[worst_val], mode="markers",
+  marker=dict(size=7, color=DOWN, line=dict(color=BG, width=1.2)),
+  hovertemplate="Worst drawdown<br>%{x|%b %d, %Y}<br>%{y:.1f}%<extra></extra>",
+  showlegend=False,
+))
+fig2.add_hrect(y0=y_bottom, y1=0, fillcolor="rgba(234,57,67,0.04)", line_width=0, layer="below")
 fig2.update_layout(height=186, margin=dict(l=0, r=0, t=4, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     font=dict(color=MUTED, family="Inter"),
@@ -583,7 +823,8 @@ fig2.update_layout(height=186, margin=dict(l=0, r=0, t=4, b=0),
                spikemode="across", spikethickness=1, spikedash="dot",
                spikecolor="rgba(255,255,255,0.22)", spikesnap="cursor"),
     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", ticksuffix="%",
-               side="right", color=MUTED),
+          side="right", color=MUTED, range=[y_bottom, y_top],
+          zeroline=True, zerolinecolor="rgba(255,255,255,0.28)", zerolinewidth=1),
     hovermode="x unified", hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER))
 st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
 
@@ -605,21 +846,20 @@ if run_sentiment:
   with oc2:
     with st.popover("How score works"):
       st.markdown("""
-**Oracle score (for selected ticker only)**
+**Oracle score (selected ticker only)**
 
-1. Pull recent headlines for the selected ticker.
-2. Keep headlines tagged to the focus ticker when tags exist.
-3. Score each headline on $[-1, +1]$ (VADER compound).
+1. Pull recent headlines for the current Oracle Focus.
+2. Use focus-tagged headlines when tags exist.
+3. Score each headline in $[-1,+1]$.
 4. Apply optional source-credibility weighting.
 5. Average into one Oracle score.
 
-Label bands:
+Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -0.35 to -0.10 · Bearish <= -0.35
 
-- Bullish: >= 0.35
-- Leaning positive: 0.10 to 0.35
-- Neutral: -0.10 to 0.10
-- Leaning negative: -0.35 to -0.10
-- Bearish: <= -0.35
+**Focus vs weighting**
+
+- Oracle Focus picks the ticker.
+- Credibility weighting only reweights sources.
 """)
 
   st.markdown(
@@ -642,150 +882,228 @@ Label bands:
   is_claude = result["engine"] == "claude"
   engine_note = "Claude — a nuanced LLM read" if is_claude else "a finance-tuned VADER lexicon"
   score = result["score"]
-  cls = "up-t" if score >= 0.05 else ("down-t" if score <= -0.05 else "gold-t")
+  # Sentiment tone uses only green / gray / red — never gold.
+  score_color = UP if score >= 0.05 else (DOWN if score <= -0.05 else MUTED)
 
   weighting_on = result.get("weighting") == "source_credibility"
-  weighting_label = "Credibility weighting: ON" if weighting_on else "Credibility weighting: OFF"
   match_mode = result.get("match_mode", "fallback")
   match_count = int(result.get("match_count", 0) or 0)
   headline_count = int(result.get("headline_count", 0) or 0)
-  focus_badge = f"Focus: {label(focus)}"
-  match_label = (
-    f"Ticker match: {match_count}/{headline_count} tagged"
-    if match_mode == "strict" else
-    "Ticker match: fallback (tag data unavailable)"
+  match_value = (
+    f"{match_count}/{headline_count} tagged" if match_mode == "strict" else "fallback"
   )
-  weighting_desc = (
-    f"Oracle Focus controls ticker selection. For {label(focus)}, Aurora scores only focus-matched headlines "
-    "when tags are available. Source credibility weighting only changes weighting, not ticker focus."
-    if weighting_on else
-    f"Oracle Focus controls ticker selection. For {label(focus)}, Aurora scores only focus-matched headlines "
-    "when tags are available. Credibility weighting is OFF, so each source is weighted equally."
-  )
-  st.caption(f"{weighting_desc} Powered by {engine_note}.")
+  # The long focus/weighting explanation now lives in the "How score works"
+  # popover, so the section opens clean instead of leading with a paragraph.
 
   st.markdown(f"""
   <style>
-    .oracle-feed {{ max-height: 360px; overflow-y: auto; padding-right: 6px; }}
+    .oracle-feed {{ max-height: 380px; overflow-y: auto; padding-right: 6px; }}
     .oracle-feed::-webkit-scrollbar {{ width: 6px; }}
     .oracle-feed::-webkit-scrollbar-track {{ background: transparent; }}
     .oracle-feed::-webkit-scrollbar-thumb {{ background: rgba(255,255,255,0.14); border-radius: 6px; }}
-    .oracle-note {{ color: {MUTED}; font-size: 0.69rem; letter-spacing: 0.015em; }}
-    .oracle-panel {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
-      padding: 0.6rem 0.75rem; margin-bottom: 0.45rem; }}
     .feed-item {{ display: flex; align-items: flex-start; gap: 0.6rem;
-    padding: 0.45rem 0.62rem; margin-bottom: 0.38rem; background: {SURFACE};
-    border: 1px solid {BORDER}; border-radius: 12px; }}
+      padding: 0.55rem 0.72rem; margin-bottom: 0.5rem; background: {SURFACE};
+      border: 1px solid {BORDER}; border-radius: 12px; }}
     .feed-item .fdot {{ width: 9px; height: 9px; border-radius: 50%;
-    margin-top: 0.32rem; flex: none; }}
-    .feed-head {{ color: {TEXT}; font-size: 0.8rem; line-height: 1.28; }}
-    .feed-meta {{ font-size: 0.65rem; font-weight: 700; margin-top: 0.14rem; letter-spacing: 0.015em; }}
-    .oracle-legend {{ color: {MUTED}; font-size: 0.68rem; margin: 0.1rem 0 0.45rem 0; }}
+      margin-top: 0.36rem; flex: none; }}
+    .feed-head {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.4; }}
+    .feed-meta {{ font-size: 0.68rem; font-weight: 600; margin-top: 0.2rem; letter-spacing: 0.01em; }}
+    .feed-score {{ color: {MUTED}; font-weight: 600; font-variant-numeric: tabular-nums;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .feed-src {{ color: {MUTED}; font-weight: 500; }}
+    .feed-match {{ color: {GOLD}; font-weight: 700; font-size: 0.62rem;
+      letter-spacing: 0.05em; text-transform: uppercase; }}
+    .oracle-legend {{ color: {MUTED}; font-size: 0.68rem; margin: 0.1rem 0 0.5rem 0; }}
     .oracle-legend .ld {{ display: inline-block; width: 8px; height: 8px;
-    border-radius: 50%; margin: 0 0.25rem 0 0.7rem; }}
-    .feed-src {{ color: {MUTED}; opacity: 0.9; }}
-    .feed-match {{ color: {GOLD}; opacity: 0.95; }}
+      border-radius: 50%; margin: 0 0.25rem 0 0.7rem; }}
+    .tone {{ font-weight: 700; font-size: 0.8rem; margin-top: 0.15rem; }}
+    .okv-list {{ margin-top: 0.5rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
+    .okv {{ display: flex; justify-content: space-between; font-size: 0.7rem; padding: 0.13rem 0; }}
+    .okv .k {{ color: {MUTED}; letter-spacing: 0.02em; }}
+    .okv .v {{ color: {TEXT}; font-weight: 600; }}
   </style>
   """, unsafe_allow_html=True)
 
   c1, c2 = st.columns([0.95, 3.05], gap="small")
   with c1:
+    # Hierarchy: dominant score, tone label, then a quiet key→value state list.
+    kv = (
+      f'<div class="okv"><span class="k">Focus</span>'
+      f'<span class="v">{esc(label(focus))}</span></div>'
+      f'<div class="okv"><span class="k">Credibility</span>'
+      f'<span class="v">{"On" if weighting_on else "Off"}</span></div>'
+      f'<div class="okv"><span class="k">Ticker match</span>'
+      f'<span class="v">{esc(match_value)}</span></div>'
+    )
     st.markdown(
-      f'<div class="stat"><div class="stat-label">Oracle score · average</div>'
-      f'<div class="stat-value {cls}">{score:+.2f}</div>'
-      f'<div style="margin-top:0.5rem"><span class="badge">{result["label"]}</span></div>'
-      f'<div style="margin-top:0.45rem"><span class="badge">{focus_badge}</span></div>'
-      f'<div style="margin-top:0.45rem"><span class="badge">{weighting_label}</span></div>'
-      f'<div style="margin-top:0.45rem"><span class="badge">{match_label}</span></div>'
-      f'<div class="tkr-sub" style="margin-top:0.48rem">powered by {engine_note}</div></div>',
+      f'<div class="stat">'
+      f'<div class="stat-label">Oracle score · average</div>'
+      f'<div class="stat-value" style="color:{score_color}">{score:+.2f}</div>'
+      f'<div class="tone" style="color:{score_color}">{result["label"]}</div>'
+      f'<div class="okv-list">{kv}</div>'
+      f'<div class="tkr-sub" style="margin-top:0.45rem">powered by {engine_note}</div>'
+      f'</div>',
       unsafe_allow_html=True,
     )
   with c2:
     if result.get("summary"):
       st.markdown(
-        f'<div class="news"><b class="gold-t">Oracle read:</b> {esc(result["summary"])} </div>',
+        f'<div class="news"><b style="color:{ACCENT2}">Oracle read:</b> {esc(result["summary"])}</div>',
         unsafe_allow_html=True,
       )
 
-    rc1, rc2 = st.columns([1.05, 1.95], gap="small")
-    with rc1:
-      st.markdown('<div class="oracle-panel"><div class="oracle-note">Sentiment trend</div></div>', unsafe_allow_html=True)
-      timeline = result.get("timeline", [])
-      if timeline:
-        tdf = pd.DataFrame(timeline)
-        tdf["date"] = pd.to_datetime(tdf["date"])
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(
-          x=tdf["date"],
-          y=tdf["score"],
-          mode="lines+markers",
-          line=dict(color=ACCENT2, width=2.2),
-          marker=dict(size=6, color=ACCENT),
-          customdata=tdf[["count"]],
-          hovertemplate="%{x|%b %d, %Y}<br>score %{y:+.2f}<br>%{customdata[0]} headlines<extra></extra>",
-        ))
-        fig3.update_layout(
-          height=162,
-          margin=dict(l=0, r=0, t=6, b=0),
-          paper_bgcolor="rgba(0,0,0,0)",
-          plot_bgcolor="rgba(0,0,0,0)",
-          font=dict(color=MUTED, family="Inter"),
-          xaxis=dict(showgrid=False, ticks="", color=MUTED),
-          yaxis=dict(
-            range=[-1, 1],
-            dtick=0.5,
-            showgrid=True,
-            gridcolor="rgba(255,255,255,0.05)",
-            color=MUTED,
-          ),
-          hovermode="x unified",
-          hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER),
-        )
-        st.plotly_chart(fig3, width="stretch", config={"displayModeBar": False})
-      else:
-        st.caption("Trend appears once recent headline dates are available.")
+    detail = result.get("detail", [])
+    if detail:
+      st.markdown(
+        f'<div class="oracle-legend">Each headline\'s tone:'
+        f'<span class="ld" style="background:{UP}"></span>positive'
+        f'<span class="ld" style="background:{MUTED}"></span>neutral'
+        f'<span class="ld" style="background:{DOWN}"></span>negative'
+        f' · focus match in gold</div>',
+        unsafe_allow_html=True,
+      )
 
-    with rc2:
-      detail = result.get("detail", [])
-      if detail:
-        st.markdown(
-          f'<div class="oracle-legend">Each headline\'s tone:'
-          f'<span class="ld" style="background:{UP}"></span>positive'
-          f'<span class="ld" style="background:{MUTED}"></span>neutral'
-          f'<span class="ld" style="background:{DOWN}"></span>negative'
-          f' · matching shown in gold</div>',
-          unsafe_allow_html=True,
-        )
+      def tone_color(s: float | None) -> str:
+        if s is None or -0.05 < s < 0.05:
+          return MUTED
+        return UP if s >= 0.05 else DOWN
 
-        def tone_color(s: float | None) -> str:
-          if s is None or -0.05 < s < 0.05:
-            return MUTED
-          return UP if s >= 0.05 else DOWN
-
-        items = ""
-        focus_label = esc(label(focus))
-        for d in detail:
-          s = d.get("score")
-          color = tone_color(s)
-          source = esc(d.get("source") or "Unknown source")
+      items = ""
+      for d in detail:
+        s = d.get("score")
+        color = tone_color(s)
+        if s is None:
+          meta_inner = f'<span style="color:{MUTED}">part of the read</span>'
+        else:
+          # One calm line: tone (color) + score (subtle mono). Suppress fields
+          # that carry no signal — unknown source, a 1.00x weight, the "BROAD" tag.
+          bits = [
+            f'<span style="color:{color}">{sent.tone_for(s)}</span>',
+            f'<span class="feed-score">{s:+.2f}</span>',
+          ]
+          source = d.get("source")
+          if source and str(source).strip().lower() not in ("", "unknown", "unknown source"):
+            bits.append(f'<span class="feed-src">{esc(source)}</span>')
           cred = float(d.get("credibility", 1.0))
-          match_text = "MATCH" if d.get("matches_focus") else "BROAD"
-          if s is None:
-            meta = f'<div class="feed-meta" style="color:{MUTED}">part of the read</div>'
-          else:
-            meta = (
-              f'<div class="feed-meta" style="color:{color}">'
-              f'{sent.tone_for(s)} · {s:+.2f} '
-              f'<span class="feed-src">({source} · {cred:.2f}x)</span> '
-              f'<span class="feed-match">[{match_text} · {focus_label}]</span></div>'
-            )
-          items += (
-            f'<div class="feed-item"><div class="fdot" style="background:{color}"></div>'
-            f'<div><div class="feed-head">{esc(d["headline"])}</div>{meta}</div></div>'
-          )
-        st.markdown(f'<div class="oracle-feed">{items}</div>', unsafe_allow_html=True)
-      else:
-        st.caption("No recent headlines came back for this asset right now.")
+          if abs(cred - 1.0) > 0.005:
+            bits.append(f'<span class="feed-src">{cred:.2f}x</span>')
+          meta_inner = " · ".join(bits)
+          if d.get("matches_focus"):        # gold, only on a real focus match
+            meta_inner += f' <span class="feed-match">{esc(label(focus))}</span>'
+        items += (
+          f'<div class="feed-item"><div class="fdot" style="background:{color}"></div>'
+          f'<div><div class="feed-head">{esc(d["headline"])}</div>'
+          f'<div class="feed-meta">{meta_inner}</div></div></div>'
+        )
+      st.markdown(f'<div class="oracle-feed">{items}</div>', unsafe_allow_html=True)
+    else:
+      st.caption("No recent headlines came back for this asset right now.")
+
+  # Oracle pulse — a plain-language, portfolio-ready panel for casual viewers.
+  timeline = result.get("timeline", [])
+  if detail:
+    pos_n = sum(1 for d in detail if (d.get("score") is not None and d.get("score", 0.0) >= 0.05))
+    neg_n = sum(1 for d in detail if (d.get("score") is not None and d.get("score", 0.0) <= -0.05))
+    neu_n = max(len(detail) - pos_n - neg_n, 0)
+    total_n = max(len(detail), 1)
+
+    match_ratio = (match_count / headline_count) if headline_count > 0 else 0.0
+    strength = abs(float(score))
+    confidence = "High" if (headline_count >= 8 and match_ratio >= 0.45 and strength >= 0.18) else (
+      "Medium" if (headline_count >= 4 and strength >= 0.08) else "Low"
+    )
+    conf_color = UP if confidence == "High" else (GOLD if confidence == "Medium" else MUTED)
+
+    pulse_line = (
+      f"Most coverage around {esc(label(focus))} is {esc(result['label'].lower())}. "
+      f"{pos_n} positive, {neu_n} neutral, {neg_n} negative headlines in this read."
+    )
+
+    top_drivers = sorted(
+      [d for d in detail if d.get("score") is not None],
+      key=lambda d: abs(float(d.get("score", 0.0))),
+      reverse=True,
+    )[:3]
+
+    mood_pos_w = 100.0 * pos_n / total_n
+    mood_neu_w = 100.0 * neu_n / total_n
+    mood_neg_w = 100.0 * neg_n / total_n
+
+    st.markdown(f"""
+    <style>
+      .oracle-pulse {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px;
+        padding: 0.72rem 0.82rem; margin-top: 0.56rem; }}
+      .pulse-title {{ color: {MUTED}; font-size: 0.64rem; font-weight: 700;
+        letter-spacing: 0.1em; text-transform: uppercase; }}
+      .pulse-line {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.38; margin-top: 0.28rem; }}
+      .pulse-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem; margin-top: 0.56rem; }}
+      .pulse-kpi {{ background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 10px;
+        padding: 0.48rem 0.52rem; }}
+      .pulse-k {{ color: {MUTED}; font-size: 0.62rem; font-weight: 700;
+        letter-spacing: 0.06em; text-transform: uppercase; }}
+      .pulse-v {{ color: {TEXT}; font-size: 0.86rem; font-weight: 700; margin-top: 0.14rem; }}
+      .pulse-mix {{ margin-top: 0.56rem; }}
+      .pulse-track {{ width: 100%; height: 10px; border-radius: 999px; overflow: hidden;
+        background: rgba(255,255,255,0.06); border: 1px solid {BORDER}; display: flex; }}
+      .mix-pos {{ background: rgba(22,199,132,0.80); }}
+      .mix-neu {{ background: rgba(139,140,166,0.70); }}
+      .mix-neg {{ background: rgba(234,57,67,0.80); }}
+      .pulse-meta {{ color: {MUTED}; font-size: 0.68rem; margin-top: 0.3rem; }}
+      .pulse-list {{ margin-top: 0.52rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
+      .pulse-item {{ color: {TEXT}; font-size: 0.76rem; line-height: 1.36; margin-bottom: 0.3rem; }}
+      .pulse-tag {{ color: {MUTED}; font-size: 0.65rem; font-weight: 600; margin-right: 0.35rem; }}
+      @media (max-width: 760px) {{
+        .pulse-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="section" style="margin-top:0.6rem">Oracle pulse</div>', unsafe_allow_html=True)
+    st.markdown(
+      f'<div class="oracle-pulse">'
+      f'<div class="pulse-title">What this means right now</div>'
+      f'<div class="pulse-line">{pulse_line}</div>'
+      f'<div class="pulse-kpis">'
+      f'  <div class="pulse-kpi"><div class="pulse-k">Coverage</div><div class="pulse-v">{headline_count} headlines</div></div>'
+      f'  <div class="pulse-kpi"><div class="pulse-k">Match quality</div><div class="pulse-v">{match_value}</div></div>'
+      f'  <div class="pulse-kpi"><div class="pulse-k">Signal confidence</div><div class="pulse-v" style="color:{conf_color}">{confidence}</div></div>'
+      f'</div>'
+      f'<div class="pulse-mix">'
+      f'  <div class="pulse-track">'
+      f'    <div class="mix-pos" style="width:{mood_pos_w:.2f}%"></div>'
+      f'    <div class="mix-neu" style="width:{mood_neu_w:.2f}%"></div>'
+      f'    <div class="mix-neg" style="width:{mood_neg_w:.2f}%"></div>'
+      f'  </div>'
+      f'  <div class="pulse-meta">Mood mix: {pos_n} positive · {neu_n} neutral · {neg_n} negative</div>'
+      f'</div>'
+      f'</div>',
+      unsafe_allow_html=True,
+    )
+
+    if top_drivers:
+      items = ""
+      for i, d in enumerate(top_drivers, start=1):
+        sc = float(d.get("score", 0.0))
+        tone = sent.tone_for(sc)
+        items += (
+          f'<div class="pulse-item">'
+          f'<span class="pulse-tag">Driver {i}</span>'
+          f'<span style="color:{UP if sc >= 0.05 else (DOWN if sc <= -0.05 else MUTED)}">{tone} {sc:+.2f}</span>'
+          f' · {esc(d.get("headline", ""))}'
+          f'</div>'
+        )
+      st.markdown(f'<div class="oracle-pulse" style="margin-top:0.42rem"><div class="pulse-title">Top drivers</div><div class="pulse-list">{items}</div></div>', unsafe_allow_html=True)
 
 st.write("")
+
+# ----------------------------------------------------------------------------
+# DATA PROVENANCE + DISCLAIMER
+# ----------------------------------------------------------------------------
+_generated = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+st.markdown(
+    f'<div style="color:{MUTED};font-size:0.7rem;letter-spacing:0.015em;margin-top:0.5rem;">'
+    f'Data: Yahoo Finance · {len(value_series)} trading days · generated {_generated}</div>',
+    unsafe_allow_html=True,
+)
 st.caption("For learning / portfolio use only — not financial advice.")
