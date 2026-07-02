@@ -23,6 +23,7 @@ import streamlit as st
 import yfinance as yf
 
 import finance_metrics as fm
+import logos
 import sentiment as sent
 
 st.set_page_config(
@@ -374,12 +375,6 @@ def reset_portfolio_defaults():
   for k in list(st.session_state.keys()):
     if k in drop_exact or k.startswith(drop_prefixes):
       del st.session_state[k]
-
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def ticker_logo_url(ticker: str) -> str | None:
-  """Use local monogram fallback badges for stable, dependency-free icons."""
-  return None
 
 
 def equalize_alloc(tickers: list[str], mode: str):
@@ -1019,32 +1014,27 @@ with hcol1:
             width="stretch",
         )
 
-        rows = ""
     for t, r in ranked:
         w = weights.get(t, 0) / hold_total_w
         cls = "up-t" if r >= 0 else "down-t"
-        icon_url = ticker_logo_url(t)
-        fallback = esc(label(t)[:1])
-        img_display = "inline-block" if icon_url else "none"
-        fb_display = "none" if icon_url else "inline-flex"
-        icon_html = (
-            f'<span class="h-icon-wrap">'
-            f'<img class="h-icon" src="{esc(icon_url or "")}" alt="{esc(label(t))} logo" '
-          f'loading="lazy" referrerpolicy="no-referrer" style="display:{img_display};" />'
-            f'<span class="h-icon-fallback" style="display:{fb_display};">{fallback}</span>'
-            f'</span>'
-        )
-        rows += (
-          f'<div class="holding">'
-          f'<div class="h-name"><a class="h-remove" href="?rm={esc(t)}" title="Remove {esc(label(t))}">x</a>{icon_html}<span>{esc(label(t))}</span></div>'
-          f'<div class="h-bar"><div class="h-bar-fill" '
-          f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
-          f'<div class="h-share">{w*100:.0f}%</div>'
-          f'<div class="h-ret {cls}">{pct(r)}</div>'
-          f'</div>'
-        )
-
-    st.markdown(rows, unsafe_allow_html=True)
+        # Crypto uses yfinance's -USD suffix (BTC-USD). Strip it for display and
+        # icon lookup; the raw ticker `t` still drives price fetching + removal.
+        asset_type = "crypto" if t.endswith("-USD") else "stock"
+        bc_icon, bc_row = st.columns([1, 10], vertical_alignment="center")
+        with bc_icon:
+            logos.render_asset_badge(label(t), asset_type, size=32)
+        with bc_row:
+            st.markdown(
+                f'<div class="holding">'
+                f'<div class="h-name"><a class="h-remove" href="?rm={esc(t)}" '
+                f'title="Remove {esc(label(t))}">x</a><span>{esc(label(t))}</span></div>'
+                f'<div class="h-bar"><div class="h-bar-fill" '
+                f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
+                f'<div class="h-share">{w*100:.0f}%</div>'
+                f'<div class="h-ret {cls}">{pct(r)}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 with hcol2:
     donut = go.Figure(go.Pie(
         labels=[label(t) for t, _ in ranked],
