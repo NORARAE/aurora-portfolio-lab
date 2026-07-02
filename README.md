@@ -70,3 +70,21 @@ ANTHROPIC_API_KEY = "sk-ant-..."
 ```
 
 Without this key, the app uses the built-in VADER flow.
+
+## Optional holo logos
+
+Holdings show company/crypto logos with a monogram fallback. Crypto icons are
+bundled locally; stock logos come from an optional logo API. Add this in
+`.streamlit/secrets.toml` (git-ignored) to enable stock logos:
+
+```toml
+QUIKTURN_KEY = "..."
+```
+
+Without this key, stock rows fall back to gradient monogram badges — nothing
+breaks.
+
+## Credits
+
+- Crypto icons: [Cryptocurrency Icons](https://github.com/spothq/cryptocurrency-icons)
+  by spothq (CC0, public domain).

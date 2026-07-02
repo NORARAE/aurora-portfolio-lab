@@ -4,6 +4,7 @@
 # with:  python -m streamlit run app.py
 streamlit==1.58.0
 yfinance==1.5.1
+requests==2.34.2     # explicit pin (yfinance pulls it in) — used by logos.py for the logo API
 pandas==3.0.3
 numpy==2.5.0
 plotly==6.8.0
