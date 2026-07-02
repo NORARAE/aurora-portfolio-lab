@@ -25,7 +25,11 @@ import yfinance as yf
 import finance_metrics as fm
 import sentiment as sent
 
-st.set_page_config(page_title="Aurora · Portfolio Lab", page_icon="✦", layout="wide")
+st.set_page_config(
+  page_title="Aurora · Portfolio Lab",
+  page_icon="assets/diamond-favicon.svg",
+  layout="wide",
+)
 
 # --- Palette ---
 BG       = "#0b0a12"; SURFACE = "#15131f"; SURFACE2 = "#1c1a28"
@@ -343,6 +347,35 @@ def remove_ticker(sym: str):
   st.session_state.tickers_text = ", ".join(nxt)
 
 
+def reset_portfolio_defaults():
+  """Reset key user inputs and clear per-ticker widget state safely."""
+  st.session_state.tickers_text = "AAPL, MSFT, NVDA"
+  st.session_state.invested = 10_000
+  st.session_state.savings_apy = 0.04
+  st.session_state.inflation = 0.038
+  st.session_state.rf = 0.04
+  st.session_state.show_real = False
+  st.session_state.run_sentiment = True
+  st.session_state.use_source_weighting = True
+
+  # Remove dynamic keys to let widgets re-seed clean defaults on rerun.
+  drop_prefixes = ("pct_", "amt_", "mini_pct_", "mini_amt_")
+  drop_exact = {
+    "mini_tickers_text",
+    "mini_invested",
+    "mini_savings_apy",
+    "mini_inflation",
+    "mini_rf",
+    "mini_alloc_mode",
+    "mini_show_real",
+    "mini_run_sentiment",
+    "mini_use_source_weighting",
+  }
+  for k in list(st.session_state.keys()):
+    if k in drop_exact or k.startswith(drop_prefixes):
+      del st.session_state[k]
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def ticker_logo_url(ticker: str) -> str | None:
   """Use local monogram fallback badges for stable, dependency-free icons."""
@@ -452,6 +485,7 @@ if rm_req:
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
+    st.button("Reset defaults", on_click=reset_portfolio_defaults, width="stretch")
     tickers_raw = st.text_input("Tickers (stocks or crypto)", key="tickers_text")
     # De-dupe (preserve order) and cap the count: each ticker is a live network
     # call, so an accidental huge paste shouldn't fan out into hundreds of fetches.
@@ -752,8 +786,11 @@ if not tickers:
     st.info("Add at least one asset in the sidebar — stocks like AAPL or crypto like BTC-USD.")
     st.stop()
 
+loading_hint = st.empty()
+loading_hint.caption("Refreshing market data and recalculating dashboard metrics...")
 with st.spinner("Loading market data…"):
     full = load_prices(tuple(tickers))
+loading_hint.empty()
 
 if full.empty:
     st.error("No data came back. Check the symbols (crypto needs the -USD suffix, e.g. BTC-USD).")
@@ -803,6 +840,8 @@ st.markdown(f"""
   </div>
 </div>
 """, unsafe_allow_html=True)
+last_bar = full.index.max().strftime("%b %d, %Y") if not full.empty else "n/a"
+st.caption(f"Last market data: {last_bar} · Refreshed {dt.datetime.now().strftime('%I:%M %p').lstrip('0')}")
 
 fig = go.Figure()
 # Vertical "aurora glow" under the line: solid near the price, fading to nothing

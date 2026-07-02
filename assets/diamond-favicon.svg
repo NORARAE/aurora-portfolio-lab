@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Aurora Diamond Icon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4de1d0"/>
+      <stop offset="55%" stop-color="#8b7bf7"/>
+      <stop offset="100%" stop-color="#f5c451"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#0b0a12" stroke="rgba(255,255,255,0.07)" stroke-width="2"/>
+  <path d="M32 9 L53 32 L32 55 L11 32 Z" fill="url(#g)"/>
+  <path d="M32 9 L42 32 L32 55 L22 32 Z" fill="rgba(255,255,255,0.18)"/>
+  <path d="M11 32 L53 32" stroke="rgba(255,255,255,0.25)" stroke-width="1.4"/>
+</svg>

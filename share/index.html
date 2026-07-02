@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aurora Portfolio Lab</title>
+  <meta name="description" content="Aurora Portfolio Lab: live market dashboard with risk metrics, benchmark context, and AI news sentiment." />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Aurora Portfolio Lab" />
+  <meta property="og:description" content="Live market dashboard with risk metrics, benchmark context, and AI sentiment." />
+  <meta property="og:image" content="https://NORARAE.github.io/aurora-portfolio-lab/share/social-card.svg" />
+  <meta property="og:url" content="https://NORARAE.github.io/aurora-portfolio-lab/share/" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Aurora Portfolio Lab" />
+  <meta name="twitter:description" content="Live market dashboard with risk metrics, benchmark context, and AI sentiment." />
+  <meta name="twitter:image" content="https://NORARAE.github.io/aurora-portfolio-lab/share/social-card.svg" />
+
+  <link rel="icon" type="image/svg+xml" href="../assets/diamond-favicon.svg" />
+
+  <style>
+    :root {
+      --bg: #0b0a12;
+      --surface: #15131f;
+      --surface2: #1c1a28;
+      --border: rgba(255,255,255,0.07);
+      --text: #edeef4;
+      --muted: #8b8ca6;
+      --accent: #8b7bf7;
+      --accent2: #4de1d0;
+      --gold: #f5c451;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(80% 50% at 12% -8%, rgba(139,123,247,0.15), transparent 60%),
+        radial-gradient(70% 55% at 100% 0%, rgba(77,225,208,0.12), transparent 55%),
+        var(--bg);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(760px, 100%);
+      border: 1px solid var(--border);
+      background: linear-gradient(160deg, var(--surface2), var(--surface));
+      border-radius: 22px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      color: transparent;
+    }
+    p { margin: 0 0 22px; color: var(--muted); }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    a.btn {
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: var(--surface2);
+      font-weight: 600;
+    }
+    a.btn.primary {
+      background: linear-gradient(90deg, rgba(77,225,208,0.18), rgba(139,123,247,0.2));
+      border-color: rgba(77,225,208,0.35);
+    }
+    .foot {
+      margin-top: 14px;
+      color: var(--gold);
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Aurora Portfolio Lab</h1>
+    <p>Live market dashboard with portfolio analytics, benchmark framing, and AI news sentiment.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://aurora-portfolio-lab.streamlit.app" target="_blank" rel="noopener">Open Live App</a>
+      <a class="btn" href="https://github.com/NORARAE/aurora-portfolio-lab" target="_blank" rel="noopener">View Source</a>
+    </div>
+    <div class="foot">Share page for custom social preview</div>
+  </main>
+</body>
+</html>
