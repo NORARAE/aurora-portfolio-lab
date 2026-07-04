@@ -61,10 +61,19 @@ st.markdown(f"""
   #MainMenu, footer, header {{ visibility: hidden; }}
   .block-container {{ padding-top: 1.05rem; padding-bottom: 1.75rem; max-width: 1120px; }}
 
-  .brand {{ font-size: 1.3rem; font-weight: 800; letter-spacing: -0.01em; }}
-  .brand .mark {{ background: linear-gradient(90deg, {ACCENT2}, {ACCENT});
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-  .sig {{ font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; opacity: 0.9; }}
+  .brand {{ display: inline-flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap;
+    font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+    font-size: clamp(1.55rem, 3.6vw, 2.1rem); }}
+  .brand .mark {{ background: linear-gradient(92deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 12px rgba(139,123,247,0.28)); }}
+  .brand .kicker {{ color: {MUTED}; font-size: clamp(0.62rem, 1.05vw, 0.72rem);
+    font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase;
+    padding-left: 0.6rem; border-left: 1px solid rgba(255,255,255,0.14);
+    align-self: center; }}
+  .brand .kicker b {{ color: {TEXT}; font-weight: 700; }}
+  .sig {{ font-size: clamp(0.66rem, 1vw, 0.74rem); font-weight: 600;
+    letter-spacing: 0.14em; opacity: 0.9; }}
   .sig a {{ color: {GOLD}; text-decoration: none; border-bottom: 1px solid rgba(245,196,81,0.45); }}
 
   /* Hero */
@@ -72,12 +81,12 @@ st.markdown(f"""
     border: 1px solid {BORDER}; border-radius: 20px;
     padding: 1.15rem 1.3rem 0.5rem 1.3rem; margin-bottom: 0.62rem;
     box-shadow: 0 20px 50px rgba(0,0,0,0.35); }}
-  .hero-label {{ color: {MUTED}; font-size: 0.66rem; font-weight: 600;
-    letter-spacing: 0.12em; text-transform: uppercase; }}
-  .hero-value {{ font-size: 2.55rem; font-weight: 800; letter-spacing: -0.03em;
+  .hero-label {{ color: {MUTED}; font-size: clamp(0.62rem, 1.05vw, 0.7rem); font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; }}
+  .hero-value {{ font-size: clamp(1.95rem, 5vw, 2.75rem); font-weight: 800; letter-spacing: -0.03em;
     line-height: 1.05; margin-top: 0.1rem; }}
   .chip {{ display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700;
-    font-size: 0.92rem; padding: 0.2rem 0.58rem; border-radius: 10px; }}
+    font-size: clamp(0.82rem, 1.4vw, 0.95rem); padding: 0.2rem 0.58rem; border-radius: 10px; }}
   .chip.up {{ color: {UP}; background: rgba(22,199,132,0.12); }}
   .chip.down {{ color: {DOWN}; background: rgba(234,57,67,0.12); }}
 
@@ -88,10 +97,10 @@ st.markdown(f"""
     padding: 0.78rem 0.9rem; position: relative; overflow: hidden; }}
   .vcard::before {{ content:''; position:absolute; top:0; left:0; right:0; height:3px;
     background: linear-gradient(90deg, {ACCENT2}, {ACCENT}); opacity:0.8; }}
-  .vcard .vlabel {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600;
-    letter-spacing: 0.1em; text-transform: uppercase; }}
-  .vcard .vmain {{ font-size: 1.18rem; font-weight: 800; margin-top: 0.22rem; letter-spacing: -0.02em; }}
-  .vcard .vsub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin-top: 0.12rem; line-height: 1.45; }}
+  .vcard .vlabel {{ color: {MUTED}; font-size: clamp(0.64rem, 1.05vw, 0.72rem); font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; }}
+  .vcard .vmain {{ font-size: clamp(1.05rem, 1.9vw, 1.22rem); font-weight: 800; margin-top: 0.22rem; letter-spacing: -0.02em; }}
+  .vcard .vsub {{ color: {MUTED}; font-size: clamp(0.76rem, 1.2vw, 0.86rem); font-weight: 400; margin-top: 0.12rem; line-height: 1.45; }}
 
   /* Stat grid: fixed 4-up on wide screens, 2-up on smaller screens */
   .stat-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -99,20 +108,23 @@ st.markdown(f"""
   .stat {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 16px;
     padding: 0.76rem 0.88rem; transition: transform 0.15s ease, border-color 0.15s ease; }}
   .stat:hover {{ transform: translateY(-2px); border-color: rgba(139,123,247,0.35); }}
-  .stat-label {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600;
-    letter-spacing: 0.1em; text-transform: uppercase; }}
-  .stat-value {{ font-size: 1.28rem; font-weight: 800; letter-spacing: -0.02em; margin-top: 0.2rem; }}
-  .stat-sub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin-top: 0.14rem; line-height: 1.45; }}
+  .stat-label {{ color: {MUTED}; font-size: clamp(0.64rem, 1.05vw, 0.72rem); font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase; }}
+  .stat-value {{ font-size: clamp(1.12rem, 2vw, 1.32rem); font-weight: 800; letter-spacing: -0.02em; margin-top: 0.2rem; }}
+  .stat-sub {{ color: {MUTED}; font-size: clamp(0.76rem, 1.2vw, 0.86rem); font-weight: 400; margin-top: 0.14rem; line-height: 1.45; }}
   .up-t {{ color: {UP}; }} .down-t {{ color: {DOWN}; }} .gold-t {{ color: {GOLD}; }} .neutral-t {{ color: {TEXT}; }}
 
   /* Holdings */
   .holding {{ display: flex; justify-content: space-between; align-items: center;
     padding: 0.62rem 0.78rem; margin-bottom: 0.38rem; background: {SURFACE};
-    border: 1px solid {BORDER}; border-radius: 12px; }}
-  .tkr {{ font-weight: 700; font-size: 0.93rem; }}
-  .tkr-sub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; line-height: 1.45; }}
+    border: 1px solid {BORDER}; border-radius: 12px;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease; }}
+  .holding:hover {{ border-color: rgba(139,123,247,0.35);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.35), 0 0 0 1px rgba(139,123,247,0.12) inset; }}
+  .tkr {{ font-weight: 700; font-size: clamp(0.85rem, 1.35vw, 0.96rem); }}
+  .tkr-sub {{ color: {MUTED}; font-size: clamp(0.78rem, 1.2vw, 0.86rem); font-weight: 400; line-height: 1.45; }}
 
-  .section {{ color: {TEXT}; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.16em;
+  .section {{ color: {TEXT}; font-size: clamp(0.78rem, 1.4vw, 0.9rem); font-weight: 700; letter-spacing: 0.16em;
     text-transform: uppercase; margin: 1.15rem 0 0.55rem 0;
     padding: 0 0 0.42rem 0.75rem;
     border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -121,7 +133,8 @@ st.markdown(f"""
      the rhythm of a portfolio report where each section reads as a chapter. */
   .section::before {{ content: ""; position: absolute;
     left: 0; top: 3px; bottom: 10px; width: 3px; border-radius: 2px;
-    background: linear-gradient(180deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%); }}
+    background: linear-gradient(180deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+    box-shadow: 0 0 8px rgba(139,123,247,0.35); }}
   .badge {{ display:inline-block; padding: 0.3rem 0.8rem; border-radius: 999px; font-weight: 700;
     font-size: 0.7rem; padding: 0.21rem 0.58rem; border: 1px solid rgba(245,196,81,0.3); background: rgba(245,196,81,0.08); color: {GOLD}; }}
   .news {{ border-left: 2px solid rgba(139,123,247,0.4); padding: 0.5rem 0.85rem; margin: 0.4rem 0;
@@ -248,13 +261,11 @@ st.markdown(f"""
     height: 0.7rem;
   }}
 
-  /* Phone tuning */
+  /* Phone tuning — clamp() handles most text; only container padding + html base. */
   @media (max-width: 640px) {{
     html {{ font-size: 13px; }}
-    .hero-value {{ font-size: 1.92rem; }}
     .hero {{ padding: 0.95rem 0.92rem 0.44rem 0.92rem; }}
     .block-container {{ padding-left: 0.8rem; padding-right: 0.8rem; }}
-    .stat-value {{ font-size: 1.16rem; }}
   }}
 
   @media (prefers-reduced-motion: reduce) {{
@@ -793,8 +804,10 @@ with st.popover("✦ Menu"):
 
 h1, h2 = st.columns([3, 2])
 with h1:
-    st.markdown('<div class="brand"><span class="mark">✦ Aurora</span> Portfolio Lab</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="brand"><span class="mark">✦ Aurora</span>'
+        '<span class="kicker"><b>Portfolio Lab</b> · risk &amp; sentiment</span></div>',
+        unsafe_allow_html=True)
 with h2:
     st.markdown(
         '<div style="text-align:right" class="sig">designed + coded by '
@@ -1048,15 +1061,20 @@ st.markdown(f"""
   .h-icon-fallback {{ width: 16px; height: 16px; border-radius: 50%; border: 1px solid {BORDER};
     background: {SURFACE2}; color: {TEXT}; font-size: 0.56rem; font-weight: 700;
     line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
-  .h-badge {{ width: 20px; height: 20px; border-radius: 50%; border: 1px solid {BORDER};
-    background: {SURFACE2}; color: {TEXT}; font-size: 0.64rem; font-weight: 700;
-    line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
+  .h-badge {{ width: 22px; height: 22px; border-radius: 50%;
+    color: {TEXT}; font-size: 0.66rem; font-weight: 800;
+    line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+    letter-spacing: 0.01em; }}
   .h-bar {{ flex: 1; height: 6px; background: rgba(255,255,255,0.06);
     border-radius: 4px; overflow: hidden; }}
-  .h-bar-fill {{ height: 100%; border-radius: 4px; }}
-  .h-share {{ color: {TEXT}; font-size: 0.78rem; font-weight: 700;
-    min-width: 40px; text-align: right; }}
-  .h-ret {{ font-weight: 800; font-size: 0.98rem; min-width: 76px; text-align: right; }}
+  .h-bar-fill {{ height: 100%; border-radius: 4px;
+    box-shadow: 0 0 6px currentColor; opacity: 0.95; }}
+  .h-share {{ color: {TEXT}; font-size: 0.82rem; font-weight: 700;
+    min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }}
+  .h-ret {{ font-weight: 800; font-size: clamp(0.9rem, 1.5vw, 1rem); min-width: 82px;
+    text-align: right; font-variant-numeric: tabular-nums;
+    display: inline-flex; align-items: center; justify-content: flex-end; gap: 0.28rem; }}
+  .h-ret .arr {{ font-size: 0.72rem; opacity: 0.85; }}
 
   /* Modern responsive add-ticker chip tape (auto-fits desktop/tablet/mobile).
      Uses Streamlit buttons so clicks are WebSocket reruns, not full page reloads.
@@ -1143,7 +1161,17 @@ with hcol1:
     for t, r in ranked:
         w = weights.get(t, 0) / hold_total_w
         cls = "up-t" if r >= 0 else "down-t"
+        arr = "▲" if r >= 0 else "▼"
         badge = esc(ticker_badge(t))
+        tint = color_for[t]
+        # Convert hex tint to rgba(0.18) badge background + full-strength border
+        # so the badge picks up the same key color used in the bar + donut.
+        _tr, _tg, _tb = int(tint[1:3], 16), int(tint[3:5], 16), int(tint[5:7], 16)
+        badge_style = (
+            f"background: rgba({_tr},{_tg},{_tb},0.20);"
+            f"border: 1px solid rgba({_tr},{_tg},{_tb},0.55);"
+            f"color: {tint};"
+        )
         row = st.container(key=f"hold_row_{t}")
         row.button(
             "×",
@@ -1153,11 +1181,11 @@ with hcol1:
         )
         row.markdown(
             f'<div class="holding">'
-            f'<div class="h-name"><span class="h-badge">{badge}</span><span>{esc(label(t))}</span></div>'
+            f'<div class="h-name"><span class="h-badge" style="{badge_style}">{badge}</span><span>{esc(label(t))}</span></div>'
             f'<div class="h-bar"><div class="h-bar-fill" '
-            f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
+            f'style="width:{w*100:.2f}%;background:{tint};color:{tint};"></div></div>'
             f'<div class="h-share">{w*100:.0f}%</div>'
-            f'<div class="h-ret {cls}">{pct(r)}</div>'
+            f'<div class="h-ret {cls}"><span class="arr">{arr}</span>{pct(r)}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
