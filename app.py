@@ -287,6 +287,58 @@ st.markdown(f"""
     .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .verdict {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
   }}
+
+  /* --------------------------------------------------------------------
+     Click / focus polish
+     Consistent tactile feedback across every interactive surface so a
+     tap or click feels acknowledged the same way everywhere.
+     -------------------------------------------------------------------- */
+
+  /* Kill the default gray flash on iOS/Android taps — we render our own
+     hover/active states, so the browser default just adds noise. */
+  .stApp, .stApp * {{ -webkit-tap-highlight-color: transparent; }}
+
+  /* Keyboard focus ring: aurora violet glow, matches the brand instead
+     of the browser default which is invisible on dark backgrounds.
+     :focus-visible so mouse clicks never leave a lingering ring. */
+  .stApp *:focus-visible {{
+    outline: 2px solid rgba(139,123,247,0.65);
+    outline-offset: 2px;
+    border-radius: 6px;
+    transition: none;
+  }}
+
+  /* Instant "pressed" micro-motion. All the cards that already lift on
+     hover get an equal-and-opposite dip on click so touch users get the
+     tactile ack they expect. Short transition-duration so the press
+     lands before the release animates back. */
+  .tf-pill:active, .feed-item:active, .driver-row:active,
+  .holding:active, .stat:active, .vcard:active, .oscore:active,
+  .osc-chip:active, .pm-chip:active,
+  [data-testid="stSidebar"] .stButton button:active,
+  .stButton button:active {{
+    transform: translateY(0) scale(0.985);
+    transition-duration: 0.06s;
+  }}
+
+  /* Main-area Streamlit buttons (quick-add tape, popover triggers, refresh
+     news, etc.) — bring them in line with the aurora card language so the
+     app stops looking half-branded / half-default. */
+  [data-testid="stMain"] .stButton button {{
+    background: linear-gradient(180deg, rgba(31,28,48,0.85), rgba(21,19,31,0.95));
+    border: 1px solid {BORDER};
+    color: {TEXT};
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: transform 0.12s ease, border-color 0.15s ease,
+      background 0.15s ease, box-shadow 0.15s ease;
+  }}
+  [data-testid="stMain"] .stButton button:hover {{
+    border-color: rgba(139,123,247,0.45);
+    background: linear-gradient(180deg, rgba(38,34,58,0.9), rgba(23,20,35,0.95));
+    box-shadow: 0 4px 14px -10px rgba(139,123,247,0.5);
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -352,6 +404,36 @@ def esc(s) -> str:
     News headlines (external), Claude summaries (LLM output), and ticker labels
     (user input) are all untrusted — escaping prevents HTML/script injection."""
     return html.escape(str(s), quote=True)
+
+
+def relative_time(iso_str: str | None) -> tuple[str, str]:
+    """Turn a published_at ISO timestamp into ("2h ago", "Nov 12, 2:14 PM").
+    Returns ("", "") if the input can't be parsed — the caller uses that to
+    skip rendering the date chip so we never show a broken/empty pill."""
+    if not iso_str:
+        return "", ""
+    try:
+        # yfinance sometimes returns Z-suffixed, sometimes ±HH:MM offsets.
+        ts = dt.datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return "", ""
+    now = dt.datetime.now(ts.tzinfo) if ts.tzinfo else dt.datetime.now()
+    delta = now - ts
+    secs = delta.total_seconds()
+    if secs < 0:  # future-dated (clock skew) — treat as "just now"
+        secs = 0
+    if secs < 60:
+        rel = "just now"
+    elif secs < 3600:
+        rel = f"{int(secs // 60)}m ago"
+    elif secs < 86400:
+        rel = f"{int(secs // 3600)}h ago"
+    elif secs < 86400 * 7:
+        rel = f"{int(secs // 86400)}d ago"
+    else:
+        rel = ts.strftime("%b %d")
+    full = ts.strftime("%b %d, %Y · %I:%M %p").lstrip("0")
+    return rel, full
 
 
 def build_export_csv(value_series, savings_series, real_series, per, weights, total_w) -> str:
@@ -1571,6 +1653,11 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
     .feed-chip-focus {{ background: rgba(245,196,81,0.08);
       border-color: rgba(245,196,81,0.35); color: {GOLD}; }}
     .feed-chip-tone {{ color: var(--tone, {MUTED}); border-color: var(--tone-border, {BORDER}); }}
+    /* Time chip reads a touch softer than source/tone — it's context, not signal. */
+    .feed-chip-time {{ background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06);
+      color: {MUTED}; letter-spacing: 0.04em; text-transform: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.64rem; font-weight: 700; }}
 
     .oracle-legend {{ color: {MUTED}; font-size: 0.78rem; font-weight: 400;
       margin: 0.15rem 0 0.55rem 0; display: flex; align-items: center; flex-wrap: wrap;
@@ -1672,6 +1759,10 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
           chips = [
             f'<span class="feed-chip feed-chip-tone" style="{vars_style}">{sent.tone_for(s)}</span>',
           ]
+          # Publish time first — gives users temporal context before source/tone.
+          rel, full = relative_time(d.get("published_at"))
+          if rel:
+            chips.insert(0, f'<span class="feed-chip feed-chip-time" title="{esc(full)}">{esc(rel)}</span>')
           source = d.get("source")
           if source and str(source).strip().lower() not in ("", "unknown", "unknown source"):
             chips.append(f'<span class="feed-chip">{esc(source)}</span>')
@@ -1957,11 +2048,17 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
       row_border = tone_border_map.get(dc, tone_border_map[MUTED])
       src = esc(str(d.get("source") or "").strip())
       src_html = f'<span class="dr-src">{src}</span><span class="dr-sep">·</span>' if src else ""
+      rel, full = relative_time(d.get("published_at"))
+      time_html = (
+        f'<span class="dr-src" title="{esc(full)}">{esc(rel)}</span><span class="dr-sep">·</span>'
+        if rel else ""
+      )
       driver_rows_html += (
         f'<div class="driver-row" data-tone="{data_tone}" '
         f'style="--tone:{dc};--tone-border:{row_border}">'
         f'<div class="dr-headline">{esc(d.get("headline", ""))}</div>'
         f'<div class="dr-meta">'
+        f'{time_html}'
         f'{src_html}'
         f'<span class="dr-score">{sc:+.2f}</span>'
         f'<span class="dr-sep">·</span>'
@@ -2027,6 +2124,146 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
     )
 
 st.write("")
+
+# ----------------------------------------------------------------------------
+# CREDITS / MARKETING SURFACE
+# A portfolio-piece footer: what the project is, what's under the hood, and
+# where to see the source. This is what turns a "cool dashboard" into a
+# "this person can build cool dashboards" signal for a recruiter.
+# ----------------------------------------------------------------------------
+st.markdown(f"""
+<style>
+  /* Credits card — mirrors the aurora card pattern used everywhere else so
+     the footer reads as part of the same design system, not tacked on. */
+  .credits {{ position: relative;
+    background: linear-gradient(180deg, rgba(31,28,48,0.85), rgba(21,19,31,0.95));
+    border: 1px solid {BORDER}; border-radius: 16px;
+    overflow: hidden;
+    padding: 1.1rem 1.15rem 1.05rem 1.15rem;
+    margin-top: 0.7rem;
+    display: grid; grid-template-columns: 1.35fr 1fr;
+    gap: 1.25rem; align-items: start;
+  }}
+  .credits::before {{ content: ""; position: absolute;
+    left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+    opacity: 0.85;
+  }}
+  .credits-brand {{ color: {TEXT};
+    font-size: clamp(0.95rem, 2vw, 1.05rem); font-weight: 800;
+    letter-spacing: 0.01em; margin-bottom: 0.35rem;
+    display: flex; align-items: center; gap: 0.4rem;
+  }}
+  .credits-brand .cb-mark {{ color: {GOLD}; font-size: 1.1em; }}
+  .credits-blurb {{ color: {MUTED};
+    font-size: clamp(0.78rem, 1.8vw, 0.86rem); font-weight: 400;
+    line-height: 1.5; margin-bottom: 0.75rem;
+    max-width: 46ch;
+  }}
+  .credits-blurb b {{ color: {TEXT}; font-weight: 600; }}
+  .credits-stack-lbl {{ color: {MUTED};
+    font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 0.35rem;
+  }}
+  .credits-stack {{ display: flex; flex-wrap: wrap; gap: 0.3rem; }}
+  .cs-chip {{ display: inline-flex; align-items: center;
+    padding: 0.24rem 0.55rem; border-radius: 999px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid {BORDER};
+    color: {TEXT};
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.01em;
+  }}
+
+  .credits-links {{ display: flex; flex-direction: column; gap: 0.7rem;
+    align-items: flex-end; text-align: right; }}
+  .credits-by {{ color: {MUTED};
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  }}
+  .credits-by b {{ color: {TEXT}; font-weight: 700; letter-spacing: 0.01em; }}
+  .credits-actions {{ display: flex; flex-wrap: wrap; gap: 0.45rem;
+    justify-content: flex-end; }}
+  .cta, .credits a.cta, .credits a.cta:visited {{
+    display: inline-flex; align-items: center; gap: 0.42rem;
+    min-height: 40px;
+    padding: 0.5rem 0.9rem; border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid {BORDER};
+    color: {TEXT};
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em;
+    text-decoration: none;
+    transition: transform 0.12s ease, border-color 0.15s ease,
+      background 0.15s ease, box-shadow 0.15s ease;
+  }}
+  .credits a.cta:hover {{ border-color: rgba(139,123,247,0.55);
+    background: linear-gradient(180deg, rgba(38,34,58,0.9), rgba(23,20,35,0.95));
+    box-shadow: 0 4px 14px -10px rgba(139,123,247,0.5);
+    color: {TEXT}; text-decoration: none;
+    transform: translateY(-1px);
+  }}
+  .credits a.cta:active {{ transform: translateY(0) scale(0.985); transition-duration: 0.06s; }}
+  .credits a.cta-primary {{
+    background: linear-gradient(135deg, rgba(139,123,247,0.22), rgba(77,225,208,0.14));
+    border-color: rgba(139,123,247,0.55);
+  }}
+  .credits a.cta svg {{ width: 14px; height: 14px; }}
+
+  @media (max-width: 720px) {{
+    .credits {{ grid-template-columns: 1fr; gap: 0.9rem; }}
+    .credits-links {{ align-items: flex-start; text-align: left; }}
+    .credits-actions {{ justify-content: flex-start; }}
+  }}
+</style>
+""", unsafe_allow_html=True)
+
+# GitHub octocat SVG kept inline so there's no extra network dep; monochrome so
+# it inherits the CTA text color.
+_github_svg = (
+    '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">'
+    '<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38'
+    ' 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13'
+    '-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66'
+    '.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15'
+    '-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0'
+    ' 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82'
+    ' 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01'
+    ' 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>'
+    '</svg>'
+)
+
+st.markdown(
+    f'<div class="credits">'
+    f'  <div>'
+    f'    <div class="credits-brand"><span class="cb-mark">✦</span> Aurora Portfolio Lab</div>'
+    f'    <div class="credits-blurb">'
+    f'      A live portfolio dashboard exploring <b>risk metrics</b>, <b>benchmark comparison</b>,'
+    f'      and <b>AI-read news sentiment</b>. Built end-to-end as a design + engineering'
+    f'      portfolio piece — data plumbing, finance math, and interaction all in Python.'
+    f'    </div>'
+    f'    <div class="credits-stack-lbl">Built with</div>'
+    f'    <div class="credits-stack">'
+    f'      <span class="cs-chip">Python</span>'
+    f'      <span class="cs-chip">Streamlit</span>'
+    f'      <span class="cs-chip">pandas</span>'
+    f'      <span class="cs-chip">NumPy</span>'
+    f'      <span class="cs-chip">Plotly</span>'
+    f'      <span class="cs-chip">yfinance</span>'
+    f'      <span class="cs-chip">VADER</span>'
+    f'      <span class="cs-chip">Anthropic Claude</span>'
+    f'    </div>'
+    f'  </div>'
+    f'  <div class="credits-links">'
+    f'    <div class="credits-by">Designed + coded by <b>Nora Genetti</b></div>'
+    f'    <div class="credits-actions">'
+    f'      <a class="cta cta-primary" href="https://github.com/NORARAE/aurora-portfolio-lab"'
+    f'         target="_blank" rel="noopener">{_github_svg} View source ↗</a>'
+    f'      <a class="cta" href="https://www.linkedin.com/in/ngenetti/"'
+    f'         target="_blank" rel="noopener">LinkedIn ↗</a>'
+    f'    </div>'
+    f'  </div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
 # ----------------------------------------------------------------------------
 # DATA PROVENANCE + DISCLAIMER
