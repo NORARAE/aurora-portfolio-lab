@@ -90,28 +90,36 @@ st.markdown(f"""
   .chip.up {{ color: {UP}; background: rgba(22,199,132,0.12); }}
   .chip.down {{ color: {DOWN}; background: rgba(234,57,67,0.12); }}
 
-  /* Verdict strip */
-  .verdict {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 0.58rem; margin-bottom: 0.62rem; }}
-  .vcard {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 16px;
-    padding: 0.78rem 0.9rem; position: relative; overflow: hidden; }}
-  .vcard::before {{ content:''; position:absolute; top:0; left:0; right:0; height:3px;
-    background: linear-gradient(90deg, {ACCENT2}, {ACCENT}); opacity:0.8; }}
-  .vcard .vlabel {{ color: {MUTED}; font-size: clamp(0.64rem, 1.05vw, 0.72rem); font-weight: 600;
-    letter-spacing: 0.12em; text-transform: uppercase; }}
-  .vcard .vmain {{ font-size: clamp(1.05rem, 1.9vw, 1.22rem); font-weight: 800; margin-top: 0.22rem; letter-spacing: -0.02em; }}
-  .vcard .vsub {{ color: {MUTED}; font-size: clamp(0.76rem, 1.2vw, 0.86rem); font-weight: 400; margin-top: 0.12rem; line-height: 1.45; }}
+  /* Verdict strip — locked 4-up on wide, 2-up on phones (mirrors stat grid). */
+  .verdict {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem; margin-bottom: 0.62rem; }}
+  .vcard {{ background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+    border: 1px solid {BORDER}; border-radius: 14px;
+    padding: 0.68rem 0.85rem 0.72rem 0.85rem; position: relative; overflow: hidden;
+    transition: border-color 0.15s ease, transform 0.15s ease; }}
+  .vcard:hover {{ border-color: rgba(139,123,247,0.28); transform: translateY(-1px); }}
+  /* Full aurora rail matches section headers so every card reads as part of the same report. */
+  .vcard::before {{ content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%); opacity:0.85; }}
+  .vcard .vlabel {{ color: {MUTED}; font-size: clamp(0.6rem, 1vw, 0.68rem); font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; }}
+  .vcard .vmain {{ font-size: clamp(1rem, 1.85vw, 1.18rem); font-weight: 800; margin-top: 0.2rem; letter-spacing: -0.02em; line-height: 1.15; }}
+  .vcard .vsub {{ color: {MUTED}; font-size: clamp(0.72rem, 1.1vw, 0.8rem); font-weight: 400; margin-top: 0.15rem; line-height: 1.4; }}
 
-  /* Stat grid: fixed 4-up on wide screens, 2-up on smaller screens */
+  /* Stat grid: fixed 4-up on wide screens, 2-up only on true phones. */
   .stat-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.56rem; margin-bottom: 0.25rem; }}
-  .stat {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 16px;
-    padding: 0.76rem 0.88rem; transition: transform 0.15s ease, border-color 0.15s ease; }}
-  .stat:hover {{ transform: translateY(-2px); border-color: rgba(139,123,247,0.35); }}
-  .stat-label {{ color: {MUTED}; font-size: clamp(0.64rem, 1.05vw, 0.72rem); font-weight: 600;
-    letter-spacing: 0.12em; text-transform: uppercase; }}
-  .stat-value {{ font-size: clamp(1.12rem, 2vw, 1.32rem); font-weight: 800; letter-spacing: -0.02em; margin-top: 0.2rem; }}
-  .stat-sub {{ color: {MUTED}; font-size: clamp(0.76rem, 1.2vw, 0.86rem); font-weight: 400; margin-top: 0.14rem; line-height: 1.45; }}
+    gap: 0.55rem; margin-bottom: 0.25rem; }}
+  .stat {{ background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+    border: 1px solid {BORDER}; border-radius: 14px;
+    padding: 0.62rem 0.8rem 0.7rem 0.8rem; position: relative; overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease; }}
+  .stat::before {{ content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%); opacity:0.75; }}
+  .stat:hover {{ transform: translateY(-1px); border-color: rgba(139,123,247,0.35); }}
+  .stat-label {{ color: {MUTED}; font-size: clamp(0.6rem, 1vw, 0.68rem); font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; }}
+  .stat-value {{ font-size: clamp(1.05rem, 1.9vw, 1.24rem); font-weight: 800; letter-spacing: -0.02em; margin-top: 0.18rem; line-height: 1.15; font-variant-numeric: tabular-nums; }}
+  .stat-sub {{ color: {MUTED}; font-size: clamp(0.72rem, 1.1vw, 0.8rem); font-weight: 400; margin-top: 0.14rem; line-height: 1.4; }}
   .up-t {{ color: {UP}; }} .down-t {{ color: {DOWN}; }} .gold-t {{ color: {GOLD}; }} .neutral-t {{ color: {TEXT}; }}
 
   /* Holdings */
@@ -275,8 +283,9 @@ st.markdown(f"""
     }}
   }}
 
-  @media (max-width: 980px) {{
+  @media (max-width: 640px) {{
     .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .verdict {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
   }}
 </style>
 """, unsafe_allow_html=True)
@@ -1568,32 +1577,53 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
       gap: 0.35rem 0.7rem; }}
     .oracle-legend .ld {{ display: inline-block; width: 8px; height: 8px;
       border-radius: 50%; margin-right: 0.32rem; vertical-align: middle; }}
-    .tone {{ font-weight: 500; font-size: 0.85rem; margin-top: 0.15rem; }}
-    .okv-list {{ margin-top: 0.5rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
-    .okv {{ display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 400; padding: 0.13rem 0; }}
-    .okv .k {{ color: {MUTED}; letter-spacing: 0.02em; }}
-    .okv .v {{ color: {TEXT}; font-weight: 500; }}
+
+    /* Oracle scoreboard: dedicated card so score + state + meta all read as
+       one unit instead of a stack of loose lines. */
+    .oscore {{ background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+      border: 1px solid {BORDER}; border-radius: 14px; overflow: hidden; position: relative;
+      padding: 0.72rem 0.9rem 0.75rem 0.9rem; }}
+    .oscore::before {{ content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%); opacity:0.85; }}
+    .oscore .osc-k {{ color: {MUTED}; font-size: clamp(0.6rem, 1vw, 0.68rem); font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase; }}
+    .oscore .osc-v {{ font-size: clamp(1.75rem, 3.4vw, 2.1rem); font-weight: 800;
+      letter-spacing: -0.03em; line-height: 1; margin-top: 0.15rem;
+      font-variant-numeric: tabular-nums; }}
+    .oscore .osc-tone {{ font-weight: 600; font-size: clamp(0.78rem, 1.15vw, 0.86rem);
+      margin-top: 0.15rem; }}
+    /* Meta chips — replace the old key/value list with tight aurora chips. */
+    .osc-chips {{ display: flex; flex-wrap: wrap; gap: 0.32rem;
+      margin-top: 0.65rem; padding-top: 0.55rem; border-top: 1px solid {BORDER}; }}
+    .osc-chip {{ display: inline-flex; align-items: center; gap: 0.3rem;
+      background: rgba(255,255,255,0.03); border: 1px solid {BORDER};
+      border-radius: 999px; padding: 0.18rem 0.55rem;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; }}
+    .osc-chip .k {{ color: {MUTED}; text-transform: uppercase; letter-spacing: 0.1em;
+      font-size: 0.6rem; }}
+    .osc-chip .v {{ color: {TEXT}; }}
+    .osc-foot {{ color: {MUTED}; font-size: 0.72rem; font-weight: 500;
+      margin-top: 0.55rem; opacity: 0.85; }}
   </style>
   """, unsafe_allow_html=True)
 
   c1, c2 = st.columns([0.95, 3.05], gap="small")
   with c1:
-    # Hierarchy: dominant score, tone label, then a quiet key→value state list.
-    kv = (
-      f'<div class="okv"><span class="k">Focus</span>'
-      f'<span class="v">{esc(label(focus))}</span></div>'
-      f'<div class="okv"><span class="k">Credibility</span>'
-      f'<span class="v">{"On" if weighting_on else "Off"}</span></div>'
-      f'<div class="okv"><span class="k">Ticker match</span>'
-      f'<span class="v">{esc(match_value)}</span></div>'
+    # One coherent scoreboard card: hero score + tone + inline meta chips + engine.
+    chips = (
+      f'<div class="osc-chips">'
+      f'<span class="osc-chip"><span class="k">Focus</span><span class="v">{esc(label(focus))}</span></span>'
+      f'<span class="osc-chip"><span class="k">Cred</span><span class="v">{"On" if weighting_on else "Off"}</span></span>'
+      f'<span class="osc-chip"><span class="k">Match</span><span class="v">{esc(match_value)}</span></span>'
+      f'</div>'
     )
     st.markdown(
-      f'<div class="stat">'
-      f'<div class="stat-label">Oracle score · average</div>'
-      f'<div class="stat-value" style="color:{score_color}">{score:+.2f}</div>'
-      f'<div class="tone" style="color:{score_color}">{result["label"]}</div>'
-      f'<div class="okv-list">{kv}</div>'
-      f'<div class="tkr-sub" style="margin-top:0.45rem">powered by {engine_note}</div>'
+      f'<div class="oscore">'
+      f'<div class="osc-k">Oracle score · avg</div>'
+      f'<div class="osc-v" style="color:{score_color}">{score:+.2f}</div>'
+      f'<div class="osc-tone" style="color:{score_color}">{result["label"]}</div>'
+      f'{chips}'
+      f'<div class="osc-foot">Powered by {engine_note}</div>'
       f'</div>',
       unsafe_allow_html=True,
     )
