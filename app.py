@@ -23,7 +23,6 @@ import streamlit as st
 import yfinance as yf
 
 import finance_metrics as fm
-import logos
 import sentiment as sent
 
 st.set_page_config(
@@ -298,6 +297,23 @@ def slice_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
 def label(t: str) -> str:
     """Display name: BTC-USD -> BTC, but leave stock tickers alone."""
     return t.replace("-USD", "") if t.endswith("-USD") else t
+
+
+def ticker_badge(t: str) -> str:
+  """Compact in-row badge text for known assets, else first letter fallback."""
+  sym = label(t).upper()
+  special = {
+    "BTC": "₿",
+    "ETH": "Ξ",
+    "SPY": "S",
+    "TSLA": "T",
+    "AMZN": "A",
+    "GOOGL": "G",
+    "AAPL": "A",
+    "MSFT": "M",
+    "NVDA": "N",
+  }
+  return special.get(sym, sym[:1] if sym else "?")
 
 def money(x: float) -> str:  return f"${x:,.0f}"
 def pct(x: float) -> str:    return f"{x*100:+.2f}%"
@@ -990,51 +1006,119 @@ st.markdown(f"""
   .h-icon-fallback {{ width: 16px; height: 16px; border-radius: 50%; border: 1px solid {BORDER};
     background: {SURFACE2}; color: {TEXT}; font-size: 0.56rem; font-weight: 700;
     line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
+  .h-badge {{ width: 20px; height: 20px; border-radius: 50%; border: 1px solid {BORDER};
+    background: {SURFACE2}; color: {TEXT}; font-size: 0.64rem; font-weight: 700;
+    line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
   .h-bar {{ flex: 1; height: 6px; background: rgba(255,255,255,0.06);
     border-radius: 4px; overflow: hidden; }}
   .h-bar-fill {{ height: 100%; border-radius: 4px; }}
   .h-share {{ color: {TEXT}; font-size: 0.78rem; font-weight: 700;
     min-width: 40px; text-align: right; }}
   .h-ret {{ font-weight: 800; font-size: 0.98rem; min-width: 76px; text-align: right; }}
+
+  /* Modern responsive add-ticker chip tape (auto-fits desktop/tablet/mobile).
+     Uses Streamlit buttons so clicks are WebSocket reruns, not full page reloads.
+     The .st-key-add_tape element IS the vertical block, so style it directly. */
+  .st-key-add_tape {{
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)) !important;
+    gap: 6px !important;
+    margin: 0.15rem 0 0.6rem 0;
+  }}
+  .st-key-add_tape > [data-testid="stElementContainer"] {{
+    width: 100% !important; min-width: 0 !important; margin: 0 !important;
+  }}
+  [class*="st-key-hold_add_"] .stButton {{ width: 100%; }}
+  [class*="st-key-hold_add_"] .stButton button {{
+    width: 100%; min-height: 26px; height: 26px; padding: 0 0.5rem;
+    border-radius: 999px; background: {SURFACE}; border: 1px solid {BORDER};
+    transition: border-color 0.15s ease, background 0.15s ease,
+                color 0.15s ease, transform 0.15s ease;
+  }}
+  [class*="st-key-hold_add_"] .stButton button [data-testid="stMarkdownContainer"] p {{
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+    color: {TEXT}; line-height: 1; white-space: nowrap; margin: 0;
+  }}
+  [class*="st-key-hold_add_"] .stButton button:hover {{
+    border-color: rgba(139,123,247,0.55);
+    background: linear-gradient(135deg, rgba(77,225,208,0.10), rgba(139,123,247,0.14));
+    transform: translateY(-1px);
+  }}
+  [class*="st-key-hold_add_"] .stButton button:hover [data-testid="stMarkdownContainer"] p {{
+    color: {ACCENT2};
+  }}
+  .add-empty {{ color: {MUTED}; font-size: 0.72rem; padding: 0.35rem 0; }}
+
+  /* Holdings row: keyed container IS the vertical block; lay out × + row body
+     as a 2-col grid, so remove clicks are fast WebSocket reruns (no page reload). */
+  [class*="st-key-hold_row_"] {{
+    display: grid !important;
+    grid-template-columns: 22px 1fr !important;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }}
+  [class*="st-key-hold_row_"] > [data-testid="stElementContainer"] {{
+    width: 100% !important; min-width: 0 !important; margin: 0 !important;
+  }}
+  [class*="st-key-hold_rm_"] .stButton {{ width: 22px; }}
+  [class*="st-key-hold_rm_"] .stButton button {{
+    width: 22px; height: 22px; min-height: 22px; padding: 0;
+    border-radius: 50%; background: {SURFACE2}; border: 1px solid {BORDER};
+    color: {MUTED}; opacity: 0.7;
+    transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }}
+  [class*="st-key-hold_rm_"] .stButton button [data-testid="stMarkdownContainer"] p {{
+    font-size: 0.78rem; font-weight: 700; line-height: 1; margin: 0;
+  }}
+  [class*="st-key-hold_row_"]:hover [class*="st-key-hold_rm_"] .stButton button {{
+    opacity: 1;
+  }}
+  [class*="st-key-hold_rm_"] .stButton button:hover {{
+    color: {TEXT}; border-color: rgba(255,255,255,0.2);
+  }}
 </style>
 """, unsafe_allow_html=True)
 
 hcol1, hcol2 = st.columns([1.7, 1], gap="medium")
 with hcol1:
     st.caption("Quick add")
-    hold_add = [("BTC-USD", "+ BTC"), ("ETH-USD", "+ ETH"), ("SPY", "+ SPY"),
-                ("TSLA", "+ TSLA"), ("AMZN", "+ AMZN"), ("GOOGL", "+ GOOGL")]
-    add_cols = st.columns(3)
-    for i, (sym, lbl) in enumerate(hold_add):
-        add_cols[i % 3].button(
-            lbl,
-            key=f"hold_add_{sym}",
-            on_click=add_ticker,
-            args=(sym,),
-            width="stretch",
-        )
+    hold_add_pool = ["BTC-USD", "ETH-USD", "SPY", "TSLA", "AMZN", "GOOGL", "AAPL", "MSFT", "NVDA"]
+    selected = {t.upper() for t in tickers}
+    hold_add = [sym for sym in hold_add_pool if sym.upper() not in selected]
+    if hold_add:
+        tape = st.container(key="add_tape")
+        for sym in hold_add:
+            tape.button(
+                f"+ {label(sym)}",
+                key=f"hold_add_{sym}",
+                on_click=add_ticker,
+                args=(sym,),
+            )
+    else:
+        st.markdown('<div class="add-empty">All quick-picks are in your portfolio.</div>', unsafe_allow_html=True)
 
     for t, r in ranked:
         w = weights.get(t, 0) / hold_total_w
         cls = "up-t" if r >= 0 else "down-t"
-        # Crypto uses yfinance's -USD suffix (BTC-USD). Strip it for display and
-        # icon lookup; the raw ticker `t` still drives price fetching + removal.
-        asset_type = "crypto" if t.endswith("-USD") else "stock"
-        bc_icon, bc_row = st.columns([1, 10], vertical_alignment="center")
-        with bc_icon:
-            logos.render_asset_badge(label(t), asset_type, size=32)
-        with bc_row:
-            st.markdown(
-                f'<div class="holding">'
-                f'<div class="h-name"><a class="h-remove" href="?rm={esc(t)}" '
-                f'title="Remove {esc(label(t))}">x</a><span>{esc(label(t))}</span></div>'
-                f'<div class="h-bar"><div class="h-bar-fill" '
-                f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
-                f'<div class="h-share">{w*100:.0f}%</div>'
-                f'<div class="h-ret {cls}">{pct(r)}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+        badge = esc(ticker_badge(t))
+        row = st.container(key=f"hold_row_{t}")
+        row.button(
+            "×",
+            key=f"hold_rm_{t}",
+            on_click=remove_ticker,
+            args=(t,),
+        )
+        row.markdown(
+            f'<div class="holding">'
+            f'<div class="h-name"><span class="h-badge">{badge}</span><span>{esc(label(t))}</span></div>'
+            f'<div class="h-bar"><div class="h-bar-fill" '
+            f'style="width:{w*100:.2f}%;background:{color_for[t]};"></div></div>'
+            f'<div class="h-share">{w*100:.0f}%</div>'
+            f'<div class="h-ret {cls}">{pct(r)}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 with hcol2:
     donut = go.Figure(go.Pie(
         labels=[label(t) for t, _ in ranked],
@@ -1067,27 +1151,73 @@ y_top = max(1.2, dd_span * 0.22)
 y_bottom = min(-1.5, dd_min * 1.12)
 worst_idx = dd_pct.idxmin()
 worst_val = float(dd_pct.loc[worst_idx])
+current_val = float(dd_pct.iloc[-1])
+# Recovery status: are we still in the pit, or back at a peak?
+in_dd = current_val < -0.05
+# Bright coral gradient reads as loss without the harsh red of a stop-light alert.
+DD_LINE = "#ff5c8a"; DD_FILL = "255,92,138"
 fig2 = go.Figure()
-fig2.add_trace(go.Scatter(x=dd.index, y=dd_pct, fill="tozeroy",
-  line=dict(color=DOWN, width=1.8), fillcolor="rgba(234,57,67,0.12)",
-    hovertemplate="%{x|%b %d, %Y}<br>%{y:.1f}%<extra></extra>"))
 fig2.add_trace(go.Scatter(
-  x=[worst_idx], y=[worst_val], mode="markers",
-  marker=dict(size=7, color=DOWN, line=dict(color=BG, width=1.2)),
-  hovertemplate="Worst drawdown<br>%{x|%b %d, %Y}<br>%{y:.1f}%<extra></extra>",
-  showlegend=False,
+    x=dd.index, y=dd_pct, mode="lines", name="Drawdown",
+    line=dict(color=DD_LINE, width=2.0, shape="spline"),
+    fill="tozeroy",
+    fillgradient=dict(type="vertical", colorscale=[
+        (0.0, f"rgba({DD_FILL},0.42)"), (1.0, f"rgba({DD_FILL},0.02)")]),
+    hovertemplate="%{x|%b %d, %Y}<br><b>%{y:.1f}%</b><extra></extra>",
+    showlegend=False,
 ))
-fig2.add_hrect(y0=y_bottom, y1=0, fillcolor="rgba(234,57,67,0.04)", line_width=0, layer="below")
-fig2.update_layout(height=186, margin=dict(l=0, r=0, t=4, b=0),
+fig2.add_trace(go.Scatter(
+    x=[worst_idx], y=[worst_val], mode="markers",
+    marker=dict(size=9, color=DD_LINE, line=dict(color=BG, width=1.6),
+                symbol="circle"),
+    hovertemplate="Worst drawdown<br>%{x|%b %d, %Y}<br>%{y:.1f}%<extra></extra>",
+    showlegend=False,
+))
+# Callout for the worst drawdown so the eye lands on the story immediately.
+fig2.add_annotation(
+    x=worst_idx, y=worst_val,
+    text=f"Worst · {worst_val:.1f}%<br><span style='color:{MUTED};font-size:10px'>{worst_idx.strftime('%b %d, %Y')}</span>",
+    showarrow=True, arrowhead=0, arrowcolor="rgba(255,255,255,0.25)",
+    arrowwidth=1, ax=0, ay=28,
+    font=dict(color=TEXT, size=12, family="Inter"),
+    bgcolor="rgba(28,26,40,0.92)", bordercolor="rgba(255,92,138,0.45)",
+    borderwidth=1, borderpad=6, align="center",
+)
+# "Prior peak" reference at 0% keeps the semantic meaning of the y-axis visible.
+fig2.add_annotation(
+    xref="paper", yref="y", x=0.005, y=0, xanchor="left", yanchor="bottom",
+    text="Prior peak · 0%",
+    showarrow=False,
+    font=dict(color=MUTED, size=10, family="Inter"),
+)
+# Current status pill in the top-right of the plot: green if recovered, coral if under water.
+status_text = f"Now · {current_val:.1f}%" if in_dd else "Now · at peak"
+status_color = DD_LINE if in_dd else UP
+fig2.add_annotation(
+    xref="paper", yref="paper", x=0.995, y=1.0, xanchor="right", yanchor="top",
+    text=f"<b>{status_text}</b>",
+    showarrow=False,
+    font=dict(color=status_color, size=11, family="Inter"),
+    bgcolor="rgba(28,26,40,0.85)",
+    bordercolor=f"rgba({DD_FILL},0.35)" if in_dd else "rgba(22,199,132,0.35)",
+    borderwidth=1, borderpad=5,
+)
+fig2.update_layout(
+    height=210, margin=dict(l=0, r=0, t=18, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color=MUTED, family="Inter"),
+    font=dict(color=MUTED, family="Inter", size=11),
+    showlegend=False,
     xaxis=dict(showgrid=False, ticks="", color=MUTED, showspikes=True,
                spikemode="across", spikethickness=1, spikedash="dot",
-               spikecolor="rgba(255,255,255,0.22)", spikesnap="cursor"),
+               spikecolor="rgba(255,255,255,0.22)", spikesnap="cursor",
+               tickfont=dict(color=MUTED, size=10)),
     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", ticksuffix="%",
           side="right", color=MUTED, range=[y_bottom, y_top],
-          zeroline=True, zerolinecolor="rgba(255,255,255,0.28)", zerolinewidth=1),
-    hovermode="x unified", hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER))
+          zeroline=True, zerolinecolor="rgba(255,255,255,0.28)", zerolinewidth=1,
+          tickfont=dict(color=MUTED, size=10)),
+    hovermode="x unified",
+    hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER),
+)
 st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
 
 # ----------------------------------------------------------------------------
@@ -1159,25 +1289,52 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
 
   st.markdown(f"""
   <style>
-    .oracle-feed {{ max-height: 380px; overflow-y: auto; padding-right: 6px; }}
+    .oracle-feed {{ max-height: 420px; overflow-y: auto; padding-right: 6px; }}
     .oracle-feed::-webkit-scrollbar {{ width: 6px; }}
     .oracle-feed::-webkit-scrollbar-track {{ background: transparent; }}
     .oracle-feed::-webkit-scrollbar-thumb {{ background: rgba(255,255,255,0.14); border-radius: 6px; }}
-    .feed-item {{ display: flex; align-items: flex-start; gap: 0.6rem;
-      padding: 0.55rem 0.72rem; margin-bottom: 0.5rem; background: {SURFACE};
-      border: 1px solid {BORDER}; border-radius: 12px; }}
-    .feed-item .fdot {{ width: 9px; height: 9px; border-radius: 50%;
-      margin-top: 0.36rem; flex: none; }}
-    .feed-head {{ color: {TEXT}; font-size: 0.85rem; font-weight: 400; line-height: 1.45; }}
-    .feed-meta {{ font-size: 0.85rem; font-weight: 400; margin-top: 0.2rem; letter-spacing: 0.01em; }}
-    .feed-score {{ color: {MUTED}; font-weight: 500; font-variant-numeric: tabular-nums;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
-    .feed-src {{ color: {MUTED}; font-weight: 400; }}
-    .feed-match {{ color: {GOLD}; font-weight: 700; font-size: 0.62rem;
-      letter-spacing: 0.05em; text-transform: uppercase; }}
-    .oracle-legend {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; margin: 0.1rem 0 0.5rem 0; }}
+
+    /* Modern headline card: tone-colored left rail, glass surface, hover lift. */
+    .feed-item {{ position: relative;
+      display: grid; grid-template-columns: 1fr auto; gap: 0.6rem;
+      align-items: start;
+      padding: 0.7rem 0.85rem 0.7rem 0.95rem;
+      margin-bottom: 0.55rem;
+      background: linear-gradient(180deg, rgba(28,26,40,0.55) 0%, rgba(21,19,31,0.85) 100%);
+      border: 1px solid {BORDER}; border-radius: 14px;
+      transition: transform 0.18s ease, border-color 0.18s ease,
+                  box-shadow 0.18s ease; }}
+    .feed-item::before {{ content: ""; position: absolute;
+      left: 0; top: 14%; bottom: 14%; width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--tone, {MUTED}); }}
+    .feed-item:hover {{ transform: translateY(-1px);
+      border-color: rgba(139,123,247,0.35);
+      box-shadow: 0 6px 18px -12px rgba(139,123,247,0.55); }}
+    .feed-head {{ color: {TEXT}; font-size: 0.9rem; font-weight: 500;
+      line-height: 1.42; letter-spacing: 0.005em; }}
+    .feed-chip-score {{ display: inline-flex; align-items: center;
+      padding: 0.22rem 0.5rem; border-radius: 999px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--tone-border, {BORDER});
+      color: var(--tone, {MUTED}); white-space: nowrap; align-self: center; }}
+    .feed-meta {{ grid-column: 1 / -1; display: flex; flex-wrap: wrap;
+      gap: 0.35rem; align-items: center; margin-top: 0.1rem; }}
+    .feed-chip {{ display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.14rem 0.5rem; border-radius: 999px;
+      background: {SURFACE}; border: 1px solid {BORDER};
+      color: {MUTED}; font-size: 0.62rem; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; }}
+    .feed-chip-focus {{ background: rgba(245,196,81,0.08);
+      border-color: rgba(245,196,81,0.35); color: {GOLD}; }}
+    .feed-chip-tone {{ color: var(--tone, {MUTED}); border-color: var(--tone-border, {BORDER}); }}
+
+    .oracle-legend {{ color: {MUTED}; font-size: 0.78rem; font-weight: 400;
+      margin: 0.15rem 0 0.55rem 0; display: flex; align-items: center; flex-wrap: wrap;
+      gap: 0.35rem 0.7rem; }}
     .oracle-legend .ld {{ display: inline-block; width: 8px; height: 8px;
-      border-radius: 50%; margin: 0 0.25rem 0 0.7rem; }}
+      border-radius: 50%; margin-right: 0.32rem; vertical-align: middle; }}
     .tone {{ font-weight: 500; font-size: 0.85rem; margin-top: 0.15rem; }}
     .okv-list {{ margin-top: 0.5rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
     .okv {{ display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 400; padding: 0.13rem 0; }}
@@ -1230,32 +1387,43 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
           return MUTED
         return UP if s >= 0.05 else DOWN
 
+      def tone_border(color: str) -> str:
+        # Match rail/chip border to tone at low opacity for a soft accent.
+        return {
+          UP: "rgba(22,199,132,0.45)",
+          DOWN: "rgba(234,57,67,0.45)",
+        }.get(color, "rgba(255,255,255,0.10)")
+
       items = ""
       for d in detail:
         s = d.get("score")
         color = tone_color(s)
+        border_c = tone_border(color)
+        vars_style = f'--tone:{color};--tone-border:{border_c};'
         if s is None:
-          meta_inner = f'<span style="color:{MUTED}">part of the read</span>'
+          # Rare "part of the read" items with no numeric score.
+          score_chip = f'<span class="feed-chip-score" style="{vars_style}">—</span>'
+          meta_chips = f'<span class="feed-chip">Part of read</span>'
         else:
-          # One calm line: tone (color) + score (subtle mono). Suppress fields
-          # that carry no signal — unknown source, a 1.00x weight, the "BROAD" tag.
-          bits = [
-            f'<span style="color:{color}">{sent.tone_for(s)}</span>',
-            f'<span class="feed-score">{s:+.2f}</span>',
+          score_chip = f'<span class="feed-chip-score" style="{vars_style}">{s:+.2f}</span>'
+          chips = [
+            f'<span class="feed-chip feed-chip-tone" style="{vars_style}">{sent.tone_for(s)}</span>',
           ]
           source = d.get("source")
           if source and str(source).strip().lower() not in ("", "unknown", "unknown source"):
-            bits.append(f'<span class="feed-src">{esc(source)}</span>')
+            chips.append(f'<span class="feed-chip">{esc(source)}</span>')
           cred = float(d.get("credibility", 1.0))
           if abs(cred - 1.0) > 0.005:
-            bits.append(f'<span class="feed-src">{cred:.2f}x</span>')
-          meta_inner = " · ".join(bits)
-          if d.get("matches_focus"):        # gold, only on a real focus match
-            meta_inner += f' <span class="feed-match">{esc(label(focus))}</span>'
+            chips.append(f'<span class="feed-chip">{cred:.2f}×</span>')
+          if d.get("matches_focus"):
+            chips.append(f'<span class="feed-chip feed-chip-focus">{esc(label(focus))}</span>')
+          meta_chips = "".join(chips)
         items += (
-          f'<div class="feed-item"><div class="fdot" style="background:{color}"></div>'
-          f'<div><div class="feed-head">{esc(d["headline"])}</div>'
-          f'<div class="feed-meta">{meta_inner}</div></div></div>'
+          f'<div class="feed-item" style="{vars_style}">'
+          f'<div class="feed-head">{esc(d["headline"])}</div>'
+          f'{score_chip}'
+          f'<div class="feed-meta">{meta_chips}</div>'
+          f'</div>'
         )
       st.markdown(f'<div class="oracle-feed">{items}</div>', unsafe_allow_html=True)
     else:
@@ -1293,69 +1461,211 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
 
     st.markdown(f"""
     <style>
-      .oracle-pulse {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px;
-        padding: 0.72rem 0.82rem; margin-top: 0.56rem; }}
-      .pulse-title {{ color: {MUTED}; font-size: 0.64rem; font-weight: 700;
-        letter-spacing: 0.1em; text-transform: uppercase; }}
-      .pulse-line {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.38; margin-top: 0.28rem; }}
+      /* Aurora-branded pulse card: subtle gradient border + sheen. */
+      .oracle-pulse {{ position: relative;
+        background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+        border: 1px solid {BORDER}; border-radius: 16px;
+        padding: 0.95rem 1.05rem 0.9rem 1.05rem;
+        margin-top: 0.6rem;
+        overflow: hidden;
+      }}
+      .oracle-pulse::before {{ content: ""; position: absolute;
+        left: 0; right: 0; top: 0; height: 2px;
+        background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+        opacity: 0.85;
+      }}
+      .oracle-pulse::after {{ content: ""; position: absolute;
+        left: -30%; top: -70%; width: 160%; height: 160%;
+        background: radial-gradient(ellipse at 25% 0%,
+          rgba(139,123,247,0.10) 0%, rgba(77,225,208,0.04) 40%, transparent 70%);
+        pointer-events: none;
+      }}
+      .oracle-pulse > * {{ position: relative; }}
+      .pulse-head {{ display: flex; align-items: center; gap: 0.55rem;
+        margin-bottom: 0.5rem; }}
+      .pulse-badge {{ display: inline-flex; align-items: center; gap: 0.32rem;
+        padding: 0.22rem 0.55rem; border-radius: 999px;
+        background: linear-gradient(135deg, rgba(139,123,247,0.18), rgba(77,225,208,0.14));
+        border: 1px solid rgba(139,123,247,0.35);
+        color: {TEXT}; font-size: 0.62rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase;
+      }}
+      .pulse-badge .pb-dot {{ width: 6px; height: 6px; border-radius: 50%;
+        background: {ACCENT2}; box-shadow: 0 0 8px {ACCENT2}; }}
+      .pulse-title {{ color: {MUTED}; font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase; }}
+
+      /* Hero row: big score chip + one-line read. */
+      .pulse-hero {{ display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center; gap: 0.85rem;
+        margin: 0.15rem 0 0.7rem 0;
+      }}
+      .pulse-score {{ display: flex; flex-direction: column; align-items: center;
+        justify-content: center;
+        min-width: 78px; padding: 0.42rem 0.8rem;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--tone-border, {BORDER});
+        border-radius: 14px;
+      }}
+      .pulse-score-val {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1.42rem; font-weight: 800; letter-spacing: 0.02em;
+        color: var(--tone, {TEXT}); line-height: 1; }}
+      .pulse-score-lbl {{ color: {MUTED}; font-size: 0.6rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase; margin-top: 0.28rem; }}
+      .pulse-line {{ color: {TEXT}; font-size: 0.86rem; line-height: 1.42; }}
+      .pulse-conf {{ display: inline-flex; flex-direction: column; align-items: flex-end;
+        gap: 0.22rem; min-width: 82px; }}
+      .pulse-conf-pill {{ display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.22rem 0.55rem; border-radius: 999px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--conf-border, {BORDER});
+        color: var(--conf, {MUTED});
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+      }}
+      .pulse-conf-lbl {{ color: {MUTED}; font-size: 0.58rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase; }}
+
+      /* KPI mini-cards. */
       .pulse-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 0.45rem; margin-top: 0.56rem; }}
-      .pulse-kpi {{ background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 10px;
-        padding: 0.48rem 0.52rem; }}
-      .pulse-k {{ color: {MUTED}; font-size: 0.62rem; font-weight: 700;
-        letter-spacing: 0.06em; text-transform: uppercase; }}
-      .pulse-v {{ color: {TEXT}; font-size: 0.86rem; font-weight: 700; margin-top: 0.14rem; }}
-      .pulse-mix {{ margin-top: 0.56rem; }}
+        gap: 0.45rem; margin-top: 0.15rem; }}
+      .pulse-kpi {{ background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 12px;
+        padding: 0.52rem 0.6rem; }}
+      .pulse-k {{ color: {MUTED}; font-size: 0.6rem; font-weight: 700;
+        letter-spacing: 0.1em; text-transform: uppercase; }}
+      .pulse-v {{ color: {TEXT}; font-size: 0.9rem; font-weight: 700; margin-top: 0.16rem;
+        letter-spacing: 0.01em; }}
+
+      /* Segmented mood bar with inline count chips. */
+      .pulse-mix {{ margin-top: 0.65rem; }}
+      .pulse-mix-legend {{ display: flex; justify-content: space-between;
+        color: {MUTED}; font-size: 0.62rem; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase;
+        margin-bottom: 0.32rem; }}
+      .pulse-mix-legend .mml {{ display: inline-flex; align-items: center; gap: 0.32rem; }}
+      .pulse-mix-legend .mml-dot {{ width: 7px; height: 7px; border-radius: 50%; }}
+      .pulse-mix-legend .mml-n {{ color: {TEXT}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 0; text-transform: none; }}
       .pulse-track {{ width: 100%; height: 10px; border-radius: 999px; overflow: hidden;
-        background: rgba(255,255,255,0.06); border: 1px solid {BORDER}; display: flex; }}
-      .mix-pos {{ background: rgba(22,199,132,0.80); }}
-      .mix-neu {{ background: rgba(139,140,166,0.70); }}
-      .mix-neg {{ background: rgba(234,57,67,0.80); }}
-      .pulse-meta {{ color: {MUTED}; font-size: 0.68rem; margin-top: 0.3rem; }}
-      .pulse-list {{ margin-top: 0.52rem; border-top: 1px solid {BORDER}; padding-top: 0.42rem; }}
-      .pulse-item {{ color: {TEXT}; font-size: 0.76rem; line-height: 1.36; margin-bottom: 0.3rem; }}
-      .pulse-tag {{ color: {MUTED}; font-size: 0.65rem; font-weight: 600; margin-right: 0.35rem; }}
+        background: rgba(255,255,255,0.05); border: 1px solid {BORDER};
+        display: flex; gap: 2px; padding: 1px; }}
+      .mix-pos {{ background: linear-gradient(90deg, rgba(22,199,132,0.9), rgba(77,225,208,0.85));
+        border-radius: 999px; }}
+      .mix-neu {{ background: rgba(139,140,166,0.55); border-radius: 999px; }}
+      .mix-neg {{ background: linear-gradient(90deg, rgba(255,92,138,0.9), rgba(234,57,67,0.85));
+        border-radius: 999px; }}
+
+      /* Top drivers: numbered rank card, score chip on the right. */
+      .drivers-card {{ margin-top: 0.5rem; }}
+      .driver-row {{ display: grid; grid-template-columns: 22px 1fr auto;
+        gap: 0.6rem; align-items: center;
+        padding: 0.52rem 0.65rem 0.52rem 0.55rem;
+        margin-bottom: 0.4rem;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid {BORDER}; border-radius: 12px;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }}
+      .driver-row:hover {{ border-color: rgba(139,123,247,0.30);
+        background: rgba(139,123,247,0.04); }}
+      .driver-rank {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em;
+        color: {MUTED}; text-align: center; }}
+      .driver-head {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.38; font-weight: 500; }}
+      .driver-score {{ display: inline-flex; align-items: center; gap: 0.32rem;
+        padding: 0.22rem 0.5rem; border-radius: 999px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--tone-border, {BORDER});
+        color: var(--tone, {MUTED});
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.68rem; font-weight: 800; white-space: nowrap; }}
+
       @media (max-width: 760px) {{
         .pulse-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+        .pulse-hero {{ grid-template-columns: auto 1fr; }}
+        .pulse-conf {{ grid-column: 1 / -1; flex-direction: row; align-items: center;
+          justify-content: flex-start; gap: 0.5rem; }}
       }}
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="section" style="margin-top:0.6rem">Oracle pulse</div>', unsafe_allow_html=True)
+    tone_border_map = {
+      UP: "rgba(22,199,132,0.45)",
+      DOWN: "rgba(234,57,67,0.45)",
+      MUTED: "rgba(139,140,166,0.35)",
+    }
+    conf_border_map = {
+      "High": "rgba(22,199,132,0.45)",
+      "Medium": "rgba(245,196,81,0.45)",
+      "Low": "rgba(139,140,166,0.35)",
+    }
+    tone_border_c = tone_border_map.get(score_color, tone_border_map[MUTED])
+    conf_border_c = conf_border_map.get(confidence, conf_border_map["Low"])
+    tone_vars = f'--tone:{score_color};--tone-border:{tone_border_c};'
+    conf_vars = f'--conf:{conf_color};--conf-border:{conf_border_c};'
+
+    st.markdown('<div class="section" style="margin-top:0.7rem">Oracle pulse</div>', unsafe_allow_html=True)
     st.markdown(
       f'<div class="oracle-pulse">'
-      f'<div class="pulse-title">What this means right now</div>'
-      f'<div class="pulse-line">{pulse_line}</div>'
+      f'<div class="pulse-head">'
+      f'  <span class="pulse-badge"><span class="pb-dot"></span>Live read</span>'
+      f'  <span class="pulse-title">What this means right now</span>'
+      f'</div>'
+      f'<div class="pulse-hero">'
+      f'  <div class="pulse-score" style="{tone_vars}">'
+      f'    <div class="pulse-score-val">{score:+.2f}</div>'
+      f'    <div class="pulse-score-lbl">{esc(result["label"])}</div>'
+      f'  </div>'
+      f'  <div class="pulse-line">{pulse_line}</div>'
+      f'  <div class="pulse-conf">'
+      f'    <span class="pulse-conf-lbl">Signal</span>'
+      f'    <span class="pulse-conf-pill" style="{conf_vars}">{confidence}</span>'
+      f'  </div>'
+      f'</div>'
       f'<div class="pulse-kpis">'
       f'  <div class="pulse-kpi"><div class="pulse-k">Coverage</div><div class="pulse-v">{headline_count} headlines</div></div>'
-      f'  <div class="pulse-kpi"><div class="pulse-k">Match quality</div><div class="pulse-v">{match_value}</div></div>'
-      f'  <div class="pulse-kpi"><div class="pulse-k">Signal confidence</div><div class="pulse-v" style="color:{conf_color}">{confidence}</div></div>'
+      f'  <div class="pulse-kpi"><div class="pulse-k">Match quality</div><div class="pulse-v">{esc(match_value)}</div></div>'
+      f'  <div class="pulse-kpi"><div class="pulse-k">Credibility</div><div class="pulse-v">{"Weighted" if weighting_on else "Off"}</div></div>'
       f'</div>'
       f'<div class="pulse-mix">'
+      f'  <div class="pulse-mix-legend">'
+      f'    <span class="mml"><span class="mml-dot" style="background:{UP}"></span>Positive <span class="mml-n">{pos_n}</span></span>'
+      f'    <span class="mml"><span class="mml-dot" style="background:{MUTED}"></span>Neutral <span class="mml-n">{neu_n}</span></span>'
+      f'    <span class="mml"><span class="mml-dot" style="background:{DOWN}"></span>Negative <span class="mml-n">{neg_n}</span></span>'
+      f'  </div>'
       f'  <div class="pulse-track">'
       f'    <div class="mix-pos" style="width:{mood_pos_w:.2f}%"></div>'
       f'    <div class="mix-neu" style="width:{mood_neu_w:.2f}%"></div>'
       f'    <div class="mix-neg" style="width:{mood_neg_w:.2f}%"></div>'
       f'  </div>'
-      f'  <div class="pulse-meta">Mood mix: {pos_n} positive · {neu_n} neutral · {neg_n} negative</div>'
       f'</div>'
       f'</div>',
       unsafe_allow_html=True,
     )
 
     if top_drivers:
-      items = ""
+      rows = ""
       for i, d in enumerate(top_drivers, start=1):
         sc = float(d.get("score", 0.0))
         tone = sent.tone_for(sc)
-        items += (
-          f'<div class="pulse-item">'
-          f'<span class="pulse-tag">Driver {i}</span>'
-          f'<span style="color:{UP if sc >= 0.05 else (DOWN if sc <= -0.05 else MUTED)}">{tone} {sc:+.2f}</span>'
-          f' · {esc(d.get("headline", ""))}'
+        dc = UP if sc >= 0.05 else (DOWN if sc <= -0.05 else MUTED)
+        dvars = f'--tone:{dc};--tone-border:{tone_border_map.get(dc, tone_border_map[MUTED])};'
+        rows += (
+          f'<div class="driver-row">'
+          f'  <div class="driver-rank">#{i}</div>'
+          f'  <div class="driver-head">{esc(d.get("headline", ""))}</div>'
+          f'  <div class="driver-score" style="{dvars}">{sc:+.2f} · {esc(tone)}</div>'
           f'</div>'
         )
-      st.markdown(f'<div class="oracle-pulse" style="margin-top:0.42rem"><div class="pulse-title">Top drivers</div><div class="pulse-list">{items}</div></div>', unsafe_allow_html=True)
+      st.markdown(
+        f'<div class="oracle-pulse drivers-card">'
+        f'<div class="pulse-head" style="margin-bottom:0.42rem">'
+        f'  <span class="pulse-badge"><span class="pb-dot"></span>Top drivers</span>'
+        f'  <span class="pulse-title">Loudest headlines by absolute tone</span>'
+        f'</div>'
+        f'{rows}'
+        f'</div>',
+        unsafe_allow_html=True,
+      )
 
 st.write("")
 
