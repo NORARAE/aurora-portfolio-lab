@@ -640,8 +640,97 @@ def sync_pct_and_rebalance(widget_key: str, state_key: str, changed_ticker: str,
 
 
 # ----------------------------------------------------------------------------
+# PRESET PORTFOLIOS — one-click loaders for common curated baskets.
+# Each entry is (button label, ticker CSV, sidebar-tooltip blurb). Grouping
+# these here keeps the sidebar block below tidy and makes it easy to add more.
+# ----------------------------------------------------------------------------
+PRESETS: list[tuple[str, str, str]] = [
+    ("AI leaders",     "NVDA, MSFT, GOOGL, META, AMD",   "Names driving the AI infrastructure buildout"),
+    ("FAANG+",         "META, AAPL, AMZN, NFLX, GOOGL",  "The original mega-cap tech cohort"),
+    ("Crypto majors",  "BTC-USD, ETH-USD, SOL-USD",      "Blue-chip crypto trio"),
+    ("Dividend blues", "KO, JNJ, PG, PEP, JPM",          "Steady dividend payers"),
+    ("60/40 balanced", "SPY, TLT",                       "Classic stocks + long-bond mix"),
+    ("Just SPY",       "SPY",                            "Market beta only — no picking"),
+]
+
+
+def load_preset(csv: str):
+    """Callback: replace tickers with a preset basket and reset the allocation
+    widgets so they re-seed to an even split for the new set."""
+    st.session_state.tickers_text = csv
+    for k in list(st.session_state.keys()):
+        if k.startswith(("pct_", "amt_", "mini_pct_", "mini_amt_")):
+            del st.session_state[k]
+
+
+# ----------------------------------------------------------------------------
+# SHAREABLE URL — encode the current portfolio + range + amount into query
+# params so a link fully reproduces the view. Read once on cold start; the
+# 'Share' button below re-encodes on demand and shows a copy-friendly URL.
+# ----------------------------------------------------------------------------
+_VALID_PERIODS = {"1M", "3M", "6M", "1Y", "2Y", "MAX"}
+
+
+def _hydrate_from_query_params() -> None:
+    """Seed session_state from URL query params on first load only. Runs before
+    the tickers_text widget so setting it here doesn't fight the widget's own
+    state ownership."""
+    qp = st.query_params
+    # Only hydrate on cold start — after that, the widgets own the state.
+    if "tickers_text" in st.session_state:
+        return
+    t_raw = str(qp.get("t", "")).strip()
+    if t_raw:
+        cleaned = ",".join(
+            s.strip().upper() for s in t_raw.split(",") if s.strip()
+        )
+        if cleaned:
+            st.session_state.tickers_text = cleaned.replace(",", ", ")
+    p_raw = str(qp.get("p", "")).strip().upper()
+    if p_raw in _VALID_PERIODS:
+        st.session_state.period = p_raw
+    try:
+        i_raw = int(str(qp.get("i", "")).strip())
+        if 500 <= i_raw <= 1_000_000:
+            st.session_state.invested = i_raw
+    except (ValueError, TypeError):
+        pass
+    # Percent weights: only meaningful if we also got tickers.
+    w_raw = str(qp.get("w", "")).strip()
+    if w_raw and t_raw:
+        parts = [p.strip() for p in w_raw.split(",") if p.strip()]
+        symbols = [s.strip().upper() for s in t_raw.split(",") if s.strip()]
+        if len(parts) == len(symbols):
+            for sym, val in zip(symbols, parts, strict=False):
+                try:
+                    pct = int(round(float(val)))
+                except ValueError:
+                    continue
+                st.session_state[f"pct_{sym}"] = max(0, min(100, pct))
+
+
+def _build_share_url(tickers_list: list[str], weights_dict: dict[str, float],
+                     period_val: str, amount_val: float) -> str:
+    """Build the current view as a shareable URL. Returns the path+query so it
+    works whether the app is served from '/' or a sub-path."""
+    from urllib.parse import urlencode
+    params = {
+        "t": ",".join(tickers_list),
+        "p": period_val,
+        "i": int(amount_val),
+    }
+    # Only include weights when they are non-default (deviating from equal).
+    total_w = sum(weights_dict.values()) or 1.0
+    pcts = [int(round((weights_dict.get(t, 0.0) / total_w) * 100)) for t in tickers_list]
+    if pcts and any(abs(p - (100 // max(len(tickers_list), 1))) > 1 for p in pcts):
+        params["w"] = ",".join(str(p) for p in pcts)
+    return "?" + urlencode(params)
+
+
+# ----------------------------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------------------------
+_hydrate_from_query_params()
 if "tickers_text" not in st.session_state:
     st.session_state.tickers_text = "AAPL, MSFT, NVDA"
 st.session_state.setdefault("invested", 10_000)   # master portfolio amount ($)
@@ -651,6 +740,7 @@ st.session_state.setdefault("rf", 0.04)
 st.session_state.setdefault("show_real", False)
 st.session_state.setdefault("run_sentiment", True)
 st.session_state.setdefault("use_source_weighting", True)
+st.session_state.setdefault("period", "1Y")
 
 # Consume inline holdings remove requests before tickers_text widget is instantiated.
 rm_req = str(st.query_params.get("rm", "")).strip().upper()
@@ -665,6 +755,17 @@ if rm_req:
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
     st.button("Reset defaults", on_click=reset_portfolio_defaults, width="stretch")
+    with st.expander("＋ Load a preset portfolio"):
+        st.caption("One-click curated baskets — replaces your current holdings and re-evens the allocation.")
+        for _name, _csv, _blurb in PRESETS:
+            st.button(
+                _name,
+                key=f"preset_{_name}",
+                on_click=load_preset,
+                args=(_csv,),
+                width="stretch",
+                help=f"{_blurb}\n\n{_csv}",
+            )
     tickers_raw = st.text_input("Tickers (stocks or crypto)", key="tickers_text")
     # De-dupe (preserve order) and cap the count: each ticker is a live network
     # call, so an accidental huge paste shouldn't fan out into hundreds of fetches.
@@ -786,6 +887,16 @@ with st.sidebar:
       help="Applies light source-trust weights to headline sentiment before averaging.",
       disabled=not run_sentiment,
     )
+
+    # --- Share this view --------------------------------------------------
+    # Encodes tickers + weights + range + amount into a URL so a link fully
+    # reproduces this dashboard on someone else's screen. Streamlit's
+    # st.query_params are read on cold start (see _hydrate_from_query_params).
+    st.markdown('<div class="section">Share this view</div>', unsafe_allow_html=True)
+    _share_period = st.session_state.get("period", "1Y")
+    _share_url = _build_share_url(tickers, weights, _share_period, amount)
+    st.code(_share_url, language=None)
+    st.caption("Copy the query above — append it to the app URL to reopen this exact portfolio.")
 
 
 # ----------------------------------------------------------------------------
@@ -987,7 +1098,8 @@ if missing:
 # RANGE + CORE SERIES
 # ----------------------------------------------------------------------------
 period = st.pills("Range", ["1M", "3M", "6M", "1Y", "2Y", "MAX"],
-                  default="1Y", label_visibility="collapsed") or "1Y"
+                  default=st.session_state.get("period", "1Y"),
+                  key="period", label_visibility="collapsed") or "1Y"
 
 view = slice_period(full, period)
 port_growth = fm.portfolio_series(view, weights)
