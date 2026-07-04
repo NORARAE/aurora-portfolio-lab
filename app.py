@@ -1712,19 +1712,24 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
       f"{pos_n} positive, {neu_n} neutral, {neg_n} negative headlines in this read."
     )
 
-    top_drivers = sorted(
+    # Sort all scored headlines by loudness (absolute tone) so the strongest
+    # signals surface at the top of the filter list. Cap at 8 to keep the
+    # card scannable — the tone filter tabs let users still find quieter
+    # positive/negative items in that pool.
+    ranked_drivers = sorted(
       [d for d in detail if d.get("score") is not None],
       key=lambda d: abs(float(d.get("score", 0.0))),
       reverse=True,
-    )[:3]
+    )[:8]
 
-    mood_pos_w = 100.0 * pos_n / total_n
-    mood_neu_w = 100.0 * neu_n / total_n
-    mood_neg_w = 100.0 * neg_n / total_n
+    # Meter position: map score from [-1, +1] to [0, 100] percent for the
+    # slider thumb. Clamp to a small inset so the thumb never touches the
+    # track's rounded ends.
+    meter_pct = max(2.0, min(98.0, (float(score) + 1.0) * 50.0))
 
     st.markdown(f"""
     <style>
-      /* Aurora-branded pulse card: subtle gradient border + sheen. */
+      /* Aurora-branded pulse card. */
       .oracle-pulse {{ position: relative;
         background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
         border: 1px solid {BORDER}; border-radius: 16px;
@@ -1744,8 +1749,10 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
         pointer-events: none;
       }}
       .oracle-pulse > * {{ position: relative; }}
+
+      /* Header: badge + title */
       .pulse-head {{ display: flex; align-items: center; gap: 0.55rem;
-        margin-bottom: 0.5rem; }}
+        margin-bottom: 0.6rem; flex-wrap: wrap; }}
       .pulse-badge {{ display: inline-flex; align-items: center; gap: 0.32rem;
         padding: 0.22rem 0.55rem; border-radius: 999px;
         background: linear-gradient(135deg, rgba(139,123,247,0.18), rgba(77,225,208,0.14));
@@ -1758,95 +1765,169 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
       .pulse-title {{ color: {MUTED}; font-size: 0.66rem; font-weight: 700;
         letter-spacing: 0.14em; text-transform: uppercase; }}
 
-      /* Hero row: big score chip + one-line read. */
-      .pulse-hero {{ display: grid;
-        grid-template-columns: auto 1fr auto;
-        align-items: center; gap: 0.85rem;
-        margin: 0.15rem 0 0.7rem 0;
+      /* Sentiment meter — a big slider-style gauge from Bearish → Bullish.
+         Not functionally interactive, but styled to communicate "this is
+         where we sit on the scale" using the universal slider metaphor. */
+      .pulse-meter {{ margin: 0.2rem 0 0.9rem 0; }}
+      .pm-top {{ display: flex; align-items: baseline; gap: 0.55rem;
+        flex-wrap: wrap; margin-bottom: 0.5rem; }}
+      .pm-val {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: clamp(1.7rem, 3.4vw, 2.15rem); font-weight: 800;
+        line-height: 1; letter-spacing: 0.01em;
+        font-variant-numeric: tabular-nums;
+        color: var(--tone, {TEXT}); }}
+      .pm-lbl {{ font-size: clamp(0.72rem, 1.7vw, 0.82rem); font-weight: 700;
+        letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--tone, {MUTED}); }}
+      .pm-track {{ position: relative; width: 100%; height: 14px;
+        border-radius: 999px;
+        background: linear-gradient(90deg,
+          rgba(234,57,67,0.85) 0%,
+          rgba(234,57,67,0.45) 22%,
+          rgba(139,140,166,0.35) 44%,
+          rgba(139,140,166,0.35) 56%,
+          rgba(22,199,132,0.45) 78%,
+          rgba(22,199,132,0.85) 100%);
+        border: 1px solid rgba(255,255,255,0.06);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.35);
       }}
-      .pulse-score {{ display: flex; flex-direction: column; align-items: center;
-        justify-content: center;
-        min-width: 78px; padding: 0.42rem 0.8rem;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid var(--tone-border, {BORDER});
-        border-radius: 14px;
+      .pm-zero {{ position: absolute; top: -3px; bottom: -3px; left: 50%;
+        width: 1px; background: rgba(255,255,255,0.18); }}
+      .pm-thumb {{ position: absolute; top: 50%; width: 24px; height: 24px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle at 32% 30%,
+          #ffffff 0%, #eef0fa 45%, #cbcfe3 100%);
+        border: 2px solid rgba(10,6,18,0.9);
+        box-shadow:
+          0 0 0 3px rgba(139,123,247,0.35),
+          0 0 12px rgba(139,123,247,0.35),
+          0 2px 6px rgba(0,0,0,0.5);
+        cursor: default;
       }}
-      .pulse-score-val {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 1.42rem; font-weight: 800; letter-spacing: 0.02em;
-        color: var(--tone, {TEXT}); line-height: 1; }}
-      .pulse-score-lbl {{ color: {MUTED}; font-size: 0.6rem; font-weight: 700;
-        letter-spacing: 0.14em; text-transform: uppercase; margin-top: 0.28rem; }}
-      .pulse-line {{ color: {TEXT}; font-size: 0.86rem; line-height: 1.42; }}
-      .pulse-conf {{ display: inline-flex; flex-direction: column; align-items: flex-end;
-        gap: 0.22rem; min-width: 82px; }}
-      .pulse-conf-pill {{ display: inline-flex; align-items: center; gap: 0.3rem;
-        padding: 0.22rem 0.55rem; border-radius: 999px;
+      .pm-thumb::after {{ content: ""; position: absolute;
+        left: 50%; top: -13px;
+        transform: translateX(-50%);
+        width: 0; height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 7px solid rgba(255,255,255,0.65);
+        filter: drop-shadow(0 0 4px rgba(139,123,247,0.6));
+      }}
+
+      /* Tone filter: touch pills that double as scale labels for the meter.
+         Uses a hidden-radio + label pattern so tapping filters the driver
+         list below with zero Streamlit rerun (state stays client-side). */
+      .op-radio {{ position: absolute; opacity: 0;
+        pointer-events: none; width: 0; height: 0; }}
+      .tone-filter {{ display: flex; flex-wrap: wrap; gap: 0.4rem;
+        margin: 0.6rem 0 0.15rem 0; }}
+      .tf-pill {{ user-select: none; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 0.42rem;
+        min-height: 36px;
+        padding: 0.4rem 0.8rem; border-radius: 999px;
         background: rgba(255,255,255,0.03);
-        border: 1px solid var(--conf-border, {BORDER});
-        color: var(--conf, {MUTED});
-        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+        border: 1px solid {BORDER};
+        color: {MUTED};
+        font-size: 0.74rem; font-weight: 700; letter-spacing: 0.03em;
+        transition: background 0.15s ease, border-color 0.15s ease,
+          color 0.15s ease, box-shadow 0.15s ease;
+        -webkit-tap-highlight-color: transparent;
       }}
-      .pulse-conf-lbl {{ color: {MUTED}; font-size: 0.58rem; font-weight: 700;
-        letter-spacing: 0.14em; text-transform: uppercase; }}
+      .tf-pill:hover {{ border-color: rgba(139,123,247,0.35);
+        color: {TEXT}; background: rgba(139,123,247,0.06); }}
+      .tf-pill .tf-dot {{ width: 8px; height: 8px; border-radius: 50%;
+        background: var(--dot, {MUTED}); flex: 0 0 auto; }}
+      .tf-pill .tf-n {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 0.72rem; font-weight: 800;
+        color: {TEXT};
+        padding: 0.05rem 0.42rem; border-radius: 999px;
+        background: rgba(255,255,255,0.06);
+      }}
+      /* Active pill state, driven by the checked radio (sibling of .tone-filter). */
+      #op-tone-all:checked ~ .tone-filter [for="op-tone-all"],
+      #op-tone-pos:checked ~ .tone-filter [for="op-tone-pos"],
+      #op-tone-neu:checked ~ .tone-filter [for="op-tone-neu"],
+      #op-tone-neg:checked ~ .tone-filter [for="op-tone-neg"] {{
+        background: linear-gradient(135deg,
+          rgba(139,123,247,0.24), rgba(77,225,208,0.16));
+        border-color: rgba(139,123,247,0.55);
+        color: {TEXT};
+        box-shadow: 0 0 14px rgba(139,123,247,0.20);
+      }}
+      /* Row hide-by-tone when a non-"all" filter is active. */
+      #op-tone-pos:checked ~ .drivers .driver-row[data-tone]:not([data-tone="pos"]) {{ display: none; }}
+      #op-tone-neu:checked ~ .drivers .driver-row[data-tone]:not([data-tone="neu"]) {{ display: none; }}
+      #op-tone-neg:checked ~ .drivers .driver-row[data-tone]:not([data-tone="neg"]) {{ display: none; }}
 
-      /* KPI mini-cards. */
-      .pulse-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 0.45rem; margin-top: 0.15rem; }}
-      .pulse-kpi {{ background: {SURFACE2}; border: 1px solid {BORDER}; border-radius: 12px;
-        padding: 0.52rem 0.6rem; }}
-      .pulse-k {{ color: {MUTED}; font-size: 0.6rem; font-weight: 700;
-        letter-spacing: 0.1em; text-transform: uppercase; }}
-      .pulse-v {{ color: {TEXT}; font-size: 0.9rem; font-weight: 700; margin-top: 0.16rem;
-        letter-spacing: 0.01em; }}
+      /* Meta chip row: coverage / match / credibility / signal — compact,
+         readable at a glance, no extra vertical space. */
+      .pulse-meta {{ display: flex; flex-wrap: wrap; gap: 0.35rem;
+        margin: 0.35rem 0 0.15rem 0; }}
+      .pm-chip {{ display: inline-flex; align-items: center; gap: 0.36rem;
+        padding: 0.3rem 0.62rem; border-radius: 999px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--chip-border, {BORDER});
+        color: {MUTED};
+        font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; }}
+      .pm-chip b {{ color: var(--chip-val, {TEXT}); font-weight: 800;
+        font-variant-numeric: tabular-nums; }}
 
-      /* Segmented mood bar with inline count chips. */
-      .pulse-mix {{ margin-top: 0.65rem; }}
-      .pulse-mix-legend {{ display: flex; justify-content: space-between;
-        color: {MUTED}; font-size: 0.62rem; font-weight: 700;
-        letter-spacing: 0.08em; text-transform: uppercase;
-        margin-bottom: 0.32rem; }}
-      .pulse-mix-legend .mml {{ display: inline-flex; align-items: center; gap: 0.32rem; }}
-      .pulse-mix-legend .mml-dot {{ width: 7px; height: 7px; border-radius: 50%; }}
-      .pulse-mix-legend .mml-n {{ color: {TEXT}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.72rem; font-weight: 700; letter-spacing: 0; text-transform: none; }}
-      .pulse-track {{ width: 100%; height: 10px; border-radius: 999px; overflow: hidden;
-        background: rgba(255,255,255,0.05); border: 1px solid {BORDER};
-        display: flex; gap: 2px; padding: 1px; }}
-      .mix-pos {{ background: linear-gradient(90deg, rgba(22,199,132,0.9), rgba(77,225,208,0.85));
-        border-radius: 999px; }}
-      .mix-neu {{ background: rgba(139,140,166,0.55); border-radius: 999px; }}
-      .mix-neg {{ background: linear-gradient(90deg, rgba(255,92,138,0.9), rgba(234,57,67,0.85));
-        border-radius: 999px; }}
+      /* Divider between meter/meta and drivers. */
+      .pulse-divider {{ height: 1px; background: {BORDER};
+        margin: 0.7rem 0 0.55rem 0; }}
+      .pulse-sub {{ color: {MUTED}; font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        margin-bottom: 0.4rem; }}
 
-      /* Top drivers: numbered rank card, score chip on the right. */
-      .drivers-card {{ margin-top: 0.5rem; }}
-      .driver-row {{ display: grid; grid-template-columns: 22px 1fr auto;
-        gap: 0.6rem; align-items: center;
-        padding: 0.52rem 0.65rem 0.52rem 0.55rem;
-        margin-bottom: 0.4rem;
+      /* Driver rows — bigger tap targets (min 56px), tone-tinted left rail,
+         headline + source/tone meta line. */
+      .drivers {{ display: flex; flex-direction: column; gap: 0.42rem; }}
+      .driver-row {{ position: relative;
+        min-height: 56px;
+        padding: 0.55rem 0.75rem 0.55rem 0.9rem;
         background: rgba(255,255,255,0.02);
         border: 1px solid {BORDER}; border-radius: 12px;
-        transition: border-color 0.15s ease, background 0.15s ease;
+        overflow: hidden;
+        transition: border-color 0.15s ease, background 0.15s ease,
+          transform 0.15s ease;
       }}
+      .driver-row::before {{ content: ""; position: absolute;
+        left: 0; top: 10px; bottom: 10px; width: 3px;
+        background: var(--tone, {MUTED});
+        border-radius: 0 3px 3px 0;
+        opacity: 0.85; }}
       .driver-row:hover {{ border-color: rgba(139,123,247,0.30);
-        background: rgba(139,123,247,0.04); }}
-      .driver-rank {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em;
-        color: {MUTED}; text-align: center; }}
-      .driver-head {{ color: {TEXT}; font-size: 0.82rem; line-height: 1.38; font-weight: 500; }}
-      .driver-score {{ display: inline-flex; align-items: center; gap: 0.32rem;
-        padding: 0.22rem 0.5rem; border-radius: 999px;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid var(--tone-border, {BORDER});
-        color: var(--tone, {MUTED});
+        background: rgba(139,123,247,0.04);
+        transform: translateY(-1px); }}
+      .dr-headline {{ color: {TEXT};
+        font-size: clamp(0.82rem, 1.7vw, 0.88rem);
+        line-height: 1.4; font-weight: 500; }}
+      .dr-meta {{ margin-top: 0.25rem;
+        color: {MUTED}; font-size: 0.7rem; font-weight: 600;
+        letter-spacing: 0.01em;
+        display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }}
+      .dr-meta .dr-src {{ color: {MUTED}; }}
+      .dr-meta .dr-sep {{ color: rgba(139,140,166,0.5); }}
+      .dr-meta .dr-score {{ color: var(--tone, {TEXT});
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.68rem; font-weight: 800; white-space: nowrap; }}
+        font-variant-numeric: tabular-nums; font-weight: 800; }}
+      .dr-meta .dr-tone {{ color: var(--tone, {TEXT}); font-weight: 700; }}
 
-      @media (max-width: 760px) {{
-        .pulse-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-        .pulse-hero {{ grid-template-columns: auto 1fr; }}
-        .pulse-conf {{ grid-column: 1 / -1; flex-direction: row; align-items: center;
-          justify-content: flex-start; gap: 0.5rem; }}
+      @media (max-width: 640px) {{
+        .oracle-pulse {{ padding: 0.85rem 0.85rem 0.8rem 0.85rem; }}
+        .pulse-meter {{ margin-bottom: 0.75rem; }}
+        .pm-track {{ height: 12px; }}
+        .pm-thumb {{ width: 22px; height: 22px; }}
+        .tone-filter {{ overflow-x: auto; flex-wrap: nowrap;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 0.25rem;
+          margin-left: -0.15rem; margin-right: -0.15rem;
+          padding-left: 0.15rem; padding-right: 0.15rem;
+        }}
+        .tf-pill {{ scroll-snap-align: start; flex: 0 0 auto; }}
       }}
     </style>
     """, unsafe_allow_html=True)
@@ -1863,72 +1944,87 @@ Bands: Bullish >= 0.35 · Lean+ 0.10 to 0.35 · Neutral -0.10 to 0.10 · Lean- -
     }
     tone_border_c = tone_border_map.get(score_color, tone_border_map[MUTED])
     conf_border_c = conf_border_map.get(confidence, conf_border_map["Low"])
-    tone_vars = f'--tone:{score_color};--tone-border:{tone_border_c};'
-    conf_vars = f'--conf:{conf_color};--conf-border:{conf_border_c};'
+
+    # Render one merged card: header → meter → filter tabs → meta strip →
+    # divider → drivers. The hidden radio inputs live at the top of the
+    # card so their :checked state cascades to sibling tabs + rows.
+    driver_rows_html = ""
+    for d in ranked_drivers:
+      sc = float(d.get("score", 0.0))
+      tone_label = sent.tone_for(sc)
+      dc = UP if sc >= 0.05 else (DOWN if sc <= -0.05 else MUTED)
+      data_tone = "pos" if sc >= 0.05 else ("neg" if sc <= -0.05 else "neu")
+      row_border = tone_border_map.get(dc, tone_border_map[MUTED])
+      src = esc(str(d.get("source") or "").strip())
+      src_html = f'<span class="dr-src">{src}</span><span class="dr-sep">·</span>' if src else ""
+      driver_rows_html += (
+        f'<div class="driver-row" data-tone="{data_tone}" '
+        f'style="--tone:{dc};--tone-border:{row_border}">'
+        f'<div class="dr-headline">{esc(d.get("headline", ""))}</div>'
+        f'<div class="dr-meta">'
+        f'{src_html}'
+        f'<span class="dr-score">{sc:+.2f}</span>'
+        f'<span class="dr-sep">·</span>'
+        f'<span class="dr-tone">{esc(tone_label)}</span>'
+        f'</div>'
+        f'</div>'
+      )
 
     st.markdown('<div class="section" style="margin-top:0.7rem">Oracle pulse</div>', unsafe_allow_html=True)
     st.markdown(
       f'<div class="oracle-pulse">'
+      # Hidden radios drive the tone-filter :checked state below. They must
+      # be siblings of .tone-filter + .drivers for the ~ combinator to work.
+      f'<input type="radio" name="op-tone" id="op-tone-all" class="op-radio" checked>'
+      f'<input type="radio" name="op-tone" id="op-tone-pos" class="op-radio">'
+      f'<input type="radio" name="op-tone" id="op-tone-neu" class="op-radio">'
+      f'<input type="radio" name="op-tone" id="op-tone-neg" class="op-radio">'
+      # Header
       f'<div class="pulse-head">'
       f'  <span class="pulse-badge"><span class="pb-dot"></span>Live read</span>'
-      f'  <span class="pulse-title">What this means right now</span>'
+      f'  <span class="pulse-title">Sentiment for {esc(label(focus))}</span>'
       f'</div>'
-      f'<div class="pulse-hero">'
-      f'  <div class="pulse-score" style="{tone_vars}">'
-      f'    <div class="pulse-score-val">{score:+.2f}</div>'
-      f'    <div class="pulse-score-lbl">{esc(result["label"])}</div>'
+      # Sentiment meter: big score, then slider-style gradient track with thumb.
+      f'<div class="pulse-meter" role="meter" aria-valuemin="-1" aria-valuemax="1" '
+      f'aria-valuenow="{score:.2f}" aria-label="Overall sentiment score" '
+      f'style="--tone:{score_color}">'
+      f'  <div class="pm-top">'
+      f'    <span class="pm-val">{score:+.2f}</span>'
+      f'    <span class="pm-lbl">{esc(result["label"])}</span>'
       f'  </div>'
-      f'  <div class="pulse-line">{pulse_line}</div>'
-      f'  <div class="pulse-conf">'
-      f'    <span class="pulse-conf-lbl">Signal</span>'
-      f'    <span class="pulse-conf-pill" style="{conf_vars}">{confidence}</span>'
-      f'  </div>'
-      f'</div>'
-      f'<div class="pulse-kpis">'
-      f'  <div class="pulse-kpi"><div class="pulse-k">Coverage</div><div class="pulse-v">{headline_count} headlines</div></div>'
-      f'  <div class="pulse-kpi"><div class="pulse-k">Match quality</div><div class="pulse-v">{esc(match_value)}</div></div>'
-      f'  <div class="pulse-kpi"><div class="pulse-k">Credibility</div><div class="pulse-v">{"Weighted" if weighting_on else "Off"}</div></div>'
-      f'</div>'
-      f'<div class="pulse-mix">'
-      f'  <div class="pulse-mix-legend">'
-      f'    <span class="mml"><span class="mml-dot" style="background:{UP}"></span>Positive <span class="mml-n">{pos_n}</span></span>'
-      f'    <span class="mml"><span class="mml-dot" style="background:{MUTED}"></span>Neutral <span class="mml-n">{neu_n}</span></span>'
-      f'    <span class="mml"><span class="mml-dot" style="background:{DOWN}"></span>Negative <span class="mml-n">{neg_n}</span></span>'
-      f'  </div>'
-      f'  <div class="pulse-track">'
-      f'    <div class="mix-pos" style="width:{mood_pos_w:.2f}%"></div>'
-      f'    <div class="mix-neu" style="width:{mood_neu_w:.2f}%"></div>'
-      f'    <div class="mix-neg" style="width:{mood_neg_w:.2f}%"></div>'
+      f'  <div class="pm-track">'
+      f'    <div class="pm-zero"></div>'
+      f'    <div class="pm-thumb" style="left:{meter_pct:.2f}%"></div>'
       f'  </div>'
       f'</div>'
-      f'</div>',
+      # Tone filter tabs (tap targets — also serve as scale legend for the meter).
+      f'<div class="tone-filter" role="tablist" aria-label="Filter headlines by tone">'
+      f'  <label for="op-tone-all" class="tf-pill" role="tab">'
+      f'    All <span class="tf-n">{len(ranked_drivers)}</span></label>'
+      f'  <label for="op-tone-neg" class="tf-pill" role="tab" style="--dot:{DOWN}">'
+      f'    <span class="tf-dot"></span>Bearish <span class="tf-n">{neg_n}</span></label>'
+      f'  <label for="op-tone-neu" class="tf-pill" role="tab" style="--dot:{MUTED}">'
+      f'    <span class="tf-dot"></span>Neutral <span class="tf-n">{neu_n}</span></label>'
+      f'  <label for="op-tone-pos" class="tf-pill" role="tab" style="--dot:{UP}">'
+      f'    <span class="tf-dot"></span>Bullish <span class="tf-n">{pos_n}</span></label>'
+      f'</div>'
+      # Meta chip strip
+      f'<div class="pulse-meta">'
+      f'  <span class="pm-chip"><b>{headline_count}</b> headlines</span>'
+      f'  <span class="pm-chip"><b>{esc(match_value)}</b></span>'
+      f'  <span class="pm-chip">Cred: <b>{"Weighted" if weighting_on else "Off"}</b></span>'
+      f'  <span class="pm-chip" style="--chip-border:{conf_border_c};--chip-val:{conf_color}">'
+      f'Signal: <b>{confidence}</b></span>'
+      f'</div>'
+      + (
+        f'<div class="pulse-divider"></div>'
+        f'<div class="pulse-sub">Top drivers · tap a tab to filter</div>'
+        f'<div class="drivers">{driver_rows_html}</div>'
+        if driver_rows_html else ""
+      )
+      + '</div>',
       unsafe_allow_html=True,
     )
-
-    if top_drivers:
-      rows = ""
-      for i, d in enumerate(top_drivers, start=1):
-        sc = float(d.get("score", 0.0))
-        tone = sent.tone_for(sc)
-        dc = UP if sc >= 0.05 else (DOWN if sc <= -0.05 else MUTED)
-        dvars = f'--tone:{dc};--tone-border:{tone_border_map.get(dc, tone_border_map[MUTED])};'
-        rows += (
-          f'<div class="driver-row">'
-          f'  <div class="driver-rank">#{i}</div>'
-          f'  <div class="driver-head">{esc(d.get("headline", ""))}</div>'
-          f'  <div class="driver-score" style="{dvars}">{sc:+.2f} · {esc(tone)}</div>'
-          f'</div>'
-        )
-      st.markdown(
-        f'<div class="oracle-pulse drivers-card">'
-        f'<div class="pulse-head" style="margin-bottom:0.42rem">'
-        f'  <span class="pulse-badge"><span class="pb-dot"></span>Top drivers</span>'
-        f'  <span class="pulse-title">Loudest headlines by absolute tone</span>'
-        f'</div>'
-        f'{rows}'
-        f'</div>',
-        unsafe_allow_html=True,
-      )
 
 st.write("")
 
