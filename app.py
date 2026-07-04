@@ -112,8 +112,16 @@ st.markdown(f"""
   .tkr {{ font-weight: 700; font-size: 0.93rem; }}
   .tkr-sub {{ color: {MUTED}; font-size: 0.85rem; font-weight: 400; line-height: 1.45; }}
 
-  .section {{ color: {MUTED}; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
-    text-transform: uppercase; margin: 0.72rem 0 0.42rem 0; }}
+  .section {{ color: {TEXT}; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.16em;
+    text-transform: uppercase; margin: 1.15rem 0 0.55rem 0;
+    padding: 0 0 0.42rem 0.75rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: relative; }}
+  /* Small aurora rail to the left of every section header — gives the page
+     the rhythm of a portfolio report where each section reads as a chapter. */
+  .section::before {{ content: ""; position: absolute;
+    left: 0; top: 3px; bottom: 10px; width: 3px; border-radius: 2px;
+    background: linear-gradient(180deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%); }}
   .badge {{ display:inline-block; padding: 0.3rem 0.8rem; border-radius: 999px; font-weight: 700;
     font-size: 0.7rem; padding: 0.21rem 0.58rem; border: 1px solid rgba(245,196,81,0.3); background: rgba(245,196,81,0.08); color: {GOLD}; }}
   .news {{ border-left: 2px solid rgba(139,123,247,0.4); padding: 0.5rem 0.85rem; margin: 0.4rem 0;
@@ -871,35 +879,40 @@ fig = go.Figure()
 # at the axis. Plotly 6's fillgradient (new to us) replaces the old flat fillcolor.
 grad_rgb = "22,199,132" if gained else "234,57,67"
 fig.add_trace(go.Scatter(x=value_series.index, y=value_series, mode="lines", name="Portfolio",
-    line=dict(color=UP if gained else DOWN, width=2.4, shape="spline"), fill="tozeroy",
+    line=dict(color=UP if gained else DOWN, width=1.8, shape="spline"), fill="tozeroy",
     fillgradient=dict(type="vertical", colorscale=[
-        (0.0, f"rgba({grad_rgb},0.00)"), (1.0, f"rgba({grad_rgb},0.34)")]),
+        (0.0, f"rgba({grad_rgb},0.00)"), (1.0, f"rgba({grad_rgb},0.22)")]),
     hovertemplate="%{x|%b %d, %Y}<br><b>$%{y:,.0f}</b><extra>Portfolio</extra>"))
 fig.add_trace(go.Scatter(x=savings_series.index, y=savings_series, mode="lines",
     name=f"Savings @ {savings_apy*100:.1f}%",
-    line=dict(color=GOLD, width=1.4, dash="dash"),
+    line=dict(color="rgba(245,196,81,0.65)", width=1.1, dash="dash"),
     hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>Savings</extra>"))
 if has_bench:
+    # Solid slim line at reduced opacity reads as a professional benchmark —
+    # cleaner than the previous dotted rendering.
     fig.add_trace(go.Scatter(x=bench_series.index, y=bench_series, mode="lines",
         name="S&P 500",
-        line=dict(color=ACCENT2, width=1.6, dash="dot"),
+        line=dict(color="rgba(77,225,208,0.75)", width=1.3, shape="spline"),
         hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>S&P 500</extra>"))
 series_range = [value_series, savings_series]
 if has_bench:
     series_range.append(bench_series)
 if show_real:
     fig.add_trace(go.Scatter(x=real_series.index, y=real_series, mode="lines",
-        name="Real (infl-adj)", line=dict(color=ACCENT, width=1.6),
+        name="Real (infl-adj)", line=dict(color=ACCENT, width=1.3),
         hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>Real</extra>"))
     series_range.append(real_series)
 
 lo = min(float(s.min()) for s in series_range)
 hi = max(float(s.max()) for s in series_range)
 pad = (hi - lo) * 0.12 or hi * 0.02
-fig.update_layout(height=292, margin=dict(l=0, r=0, t=6, b=0),
+fig.update_layout(height=292, margin=dict(l=0, r=0, t=14, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     font=dict(color=MUTED, family="Inter"),
-    legend=dict(orientation="h", y=1.14, x=0, bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
+    legend=dict(orientation="h", y=1.12, x=0, xanchor="left",
+                bgcolor="rgba(28,26,40,0.55)", bordercolor=BORDER, borderwidth=1,
+                font=dict(size=10, color=TEXT),
+                itemsizing="constant", itemwidth=30),
     xaxis=dict(showgrid=False, ticks="", color=MUTED, showspikes=True,
                spikemode="across", spikethickness=1, spikedash="dot",
                spikecolor="rgba(255,255,255,0.22)", spikesnap="cursor"),
@@ -1188,10 +1201,10 @@ DD_LINE = "#ff5c8a"; DD_FILL = "255,92,138"
 fig2 = go.Figure()
 fig2.add_trace(go.Scatter(
     x=dd.index, y=dd_pct, mode="lines", name="Drawdown",
-    line=dict(color=DD_LINE, width=2.0, shape="spline"),
+    line=dict(color=DD_LINE, width=1.6, shape="spline"),
     fill="tozeroy",
     fillgradient=dict(type="vertical", colorscale=[
-        (0.0, f"rgba({DD_FILL},0.42)"), (1.0, f"rgba({DD_FILL},0.02)")]),
+        (0.0, f"rgba({DD_FILL},0.32)"), (1.0, f"rgba({DD_FILL},0.02)")]),
     hovertemplate="%{x|%b %d, %Y}<br><b>%{y:.1f}%</b><extra></extra>",
     showlegend=False,
 ))
@@ -1203,11 +1216,13 @@ fig2.add_trace(go.Scatter(
     showlegend=False,
 ))
 # Callout for the worst drawdown so the eye lands on the story immediately.
+# ay is NEGATIVE so the label sits ABOVE the trough (positive would push it
+# through the bottom of the chart and get clipped).
 fig2.add_annotation(
     x=worst_idx, y=worst_val,
     text=f"Worst · {worst_val:.1f}%<br><span style='color:{MUTED};font-size:10px'>{worst_idx.strftime('%b %d, %Y')}</span>",
     showarrow=True, arrowhead=0, arrowcolor="rgba(255,255,255,0.25)",
-    arrowwidth=1, ax=0, ay=28,
+    arrowwidth=1, ax=0, ay=-42,
     font=dict(color=TEXT, size=12, family="Inter"),
     bgcolor="rgba(28,26,40,0.92)", bordercolor="rgba(255,92,138,0.45)",
     borderwidth=1, borderpad=6, align="center",
@@ -1232,7 +1247,7 @@ fig2.add_annotation(
     borderwidth=1, borderpad=5,
 )
 fig2.update_layout(
-    height=210, margin=dict(l=0, r=0, t=18, b=0),
+    height=230, margin=dict(l=0, r=0, t=34, b=6),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     font=dict(color=MUTED, family="Inter", size=11),
     showlegend=False,
@@ -1254,34 +1269,29 @@ st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
 # ----------------------------------------------------------------------------
 # Only meaningful once we have at least a full window of days after the pct_change.
 if len(port_growth) >= 45:
-  st.markdown('<div class="section" style="margin-top:0.6rem">Rolling risk vitals · last 30 trading days</div>', unsafe_allow_html=True)
+  st.markdown('<div class="section" style="margin-top:0.7rem">Rolling risk vitals · last 30 trading days</div>', unsafe_allow_html=True)
   st.caption("Volatility = how bumpy the ride is right now. Sharpe = return per unit of that risk. Rising Sharpe is being paid for the turbulence.")
 
   roll_vol = fm.rolling_volatility(port_growth, window=30).dropna()
   roll_shp = fm.rolling_sharpe(port_growth, window=30, risk_free_rate=rf).dropna()
 
-  def _sparkline(series, latest, tone_color, unit, title):
+  # Sparkline is now JUST the sparkline — the big label lives in a proper
+  # markdown header above it, so nothing can overlap.
+  def _sparkline(series, tone_color):
       r, g, b = int(tone_color[1:3], 16), int(tone_color[3:5], 16), int(tone_color[5:7], 16)
       f = go.Figure()
       f.add_trace(go.Scatter(
           x=series.index, y=series.values, mode="lines",
-          line=dict(color=tone_color, width=2.0, shape="spline"),
+          line=dict(color=tone_color, width=1.6, shape="spline"),
           fill="tozeroy",
           fillgradient=dict(type="vertical", colorscale=[
               (0.0, f"rgba({r},{g},{b},0.00)"),
-              (1.0, f"rgba({r},{g},{b},0.28)")]),
-          hovertemplate="%{x|%b %d, %Y}<br><b>" + unit + "</b><extra></extra>",
+              (1.0, f"rgba({r},{g},{b},0.26)")]),
+          hovertemplate="%{x|%b %d, %Y}<br><b>%{y:.2f}</b><extra></extra>",
           showlegend=False,
       ))
-      # Big current value + title, painted in the top-left of the sparkline.
-      f.add_annotation(
-          xref="paper", yref="paper", x=0.01, y=1.0, xanchor="left", yanchor="top",
-          text=f"<span style='color:{MUTED};font-size:10px;letter-spacing:0.14em;'>{title.upper()}</span><br>"
-               f"<b style='color:{tone_color};font-size:20px;'>{latest}</b>",
-          showarrow=False, align="left",
-      )
       f.update_layout(
-          height=140, margin=dict(l=0, r=0, t=6, b=0),
+          height=88, margin=dict(l=0, r=0, t=4, b=4),
           paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
           font=dict(color=MUTED, family="Inter", size=10),
           xaxis=dict(visible=False, showgrid=False),
@@ -1291,21 +1301,81 @@ if len(port_growth) >= 45:
       )
       return f
 
+  st.markdown(f"""
+  <style>
+    /* Rolling-vitals cards: soft rounded surface, aurora top rail. */
+    [class*="st-key-riskcard_"] {{
+      position: relative;
+      background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+      border: 1px solid {BORDER}; border-radius: 16px;
+      padding: 0.75rem 0.95rem 0.35rem 0.95rem;
+      overflow: hidden;
+    }}
+    [class*="st-key-riskcard_"]::before {{ content: ""; position: absolute;
+      left: 0; right: 0; top: 0; height: 2px;
+      background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+      opacity: 0.8;
+    }}
+    .risk-head {{ display: flex; align-items: baseline; justify-content: space-between;
+      gap: 0.5rem; margin-bottom: 0.15rem; }}
+    .risk-k {{ color: {MUTED}; font-size: 0.6rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase; }}
+    .risk-v {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1.5rem; font-weight: 800; letter-spacing: 0.01em; line-height: 1; }}
+    .risk-sub {{ color: {MUTED}; font-size: 0.66rem; font-weight: 500;
+      margin-top: 0.1rem; }}
+
+    /* Matching soft frame around the correlation heatmap. */
+    .st-key-heatmap_card {{
+      background: linear-gradient(180deg, rgba(31,28,48,0.85) 0%, rgba(21,19,31,0.95) 100%);
+      border: 1px solid {BORDER}; border-radius: 16px;
+      padding: 0.7rem 0.8rem 0.4rem 0.8rem;
+      position: relative; overflow: hidden;
+    }}
+    .st-key-heatmap_card::before {{ content: ""; position: absolute;
+      left: 0; right: 0; top: 0; height: 2px;
+      background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+      opacity: 0.8;
+    }}
+  </style>
+  """, unsafe_allow_html=True)
+
   rc1, rc2 = st.columns(2, gap="small")
+  latest_vol = float(roll_vol.iloc[-1]) if not roll_vol.empty else 0.0
+  latest_shp = float(roll_shp.iloc[-1]) if not roll_shp.empty else 0.0
+  vol_avg = float(roll_vol.mean()) if not roll_vol.empty else 0.0
+  # Compare current vol to its own average — is the ride bumpier or calmer than usual?
+  vol_trend = "calmer than usual" if latest_vol < vol_avg else "bumpier than usual"
+  shp_color = UP if latest_shp >= 0.5 else (GOLD if latest_shp >= 0 else DOWN)
+  shp_verdict = "well paid for risk" if latest_shp >= 1.0 else (
+      "getting paid" if latest_shp >= 0.5 else (
+      "modest reward" if latest_shp >= 0 else "not paid for risk"))
+
   with rc1:
-      latest_vol = float(roll_vol.iloc[-1]) if not roll_vol.empty else 0.0
-      # Muted violet fits "risk" — cold and neutral, not alarming.
-      st.plotly_chart(
-          _sparkline(roll_vol * 100, f"{latest_vol*100:.1f}%", ACCENT, "%{y:.1f}%", "Annualized volatility"),
-          width="stretch", config={"displayModeBar": False},
+      # Vibrant cyan reads as "cool tech / risk-sensor" — matches aurora palette.
+      card = st.container(key="riskcard_vol")
+      card.markdown(
+          f'<div class="risk-head">'
+          f'<span class="risk-k">Annualized volatility</span>'
+          f'<span class="risk-v" style="color:{ACCENT2}">{latest_vol*100:.1f}%</span>'
+          f'</div>'
+          f'<div class="risk-sub">{vol_trend} · 30-day avg {vol_avg*100:.1f}%</div>',
+          unsafe_allow_html=True,
       )
+      card.plotly_chart(_sparkline(roll_vol * 100, ACCENT2),
+                        width="stretch", config={"displayModeBar": False})
   with rc2:
-      latest_shp = float(roll_shp.iloc[-1]) if not roll_shp.empty else 0.0
-      shp_color = UP if latest_shp >= 0.5 else (GOLD if latest_shp >= 0 else DOWN)
-      st.plotly_chart(
-          _sparkline(roll_shp, f"{latest_shp:+.2f}", shp_color, "%{y:.2f}", "Rolling Sharpe"),
-          width="stretch", config={"displayModeBar": False},
+      card = st.container(key="riskcard_shp")
+      card.markdown(
+          f'<div class="risk-head">'
+          f'<span class="risk-k">Rolling Sharpe</span>'
+          f'<span class="risk-v" style="color:{shp_color}">{latest_shp:+.2f}</span>'
+          f'</div>'
+          f'<div class="risk-sub">{shp_verdict} · 30-day window</div>',
+          unsafe_allow_html=True,
       )
+      card.plotly_chart(_sparkline(roll_shp, shp_color),
+                        width="stretch", config={"displayModeBar": False})
 
 # ----------------------------------------------------------------------------
 # CORRELATION HEATMAP (how holdings move together)
@@ -1313,44 +1383,47 @@ if len(port_growth) >= 45:
 if len(tickers) >= 2:
   corr = fm.correlation_matrix(view)
   if not corr.empty:
-      st.markdown('<div class="section" style="margin-top:0.6rem">Correlation · how your holdings move together</div>', unsafe_allow_html=True)
-      st.caption("+1 (warm) = they rise and fall together, so gains and losses stack up. 0 (dark) = independent. −1 (cool) = they hedge each other.")
+      st.markdown('<div class="section" style="margin-top:0.7rem">Correlation · how your holdings move together</div>', unsafe_allow_html=True)
+      st.caption("Aurora scale — violet = hedging (they cancel), cyan = independent, gold = concentrated (they move together).")
       order = list(corr.columns)
       lbls = [label(t) for t in order]
       z = corr.values.tolist()
-      # Text overlay for each cell — small mono, TEXT on strong cells, MUTED on weak.
+      # Text overlay for each cell — small mono, TEXT on strong cells.
       text = [[f"{corr.iloc[i,j]:+.2f}" for j in range(len(order))] for i in range(len(order))]
       heat = go.Figure(go.Heatmap(
           z=z, x=lbls, y=lbls, text=text, texttemplate="%{text}",
           textfont=dict(family="ui-monospace, SFMono-Regular, Menlo, monospace",
                         size=12, color=TEXT),
           zmin=-1, zmid=0, zmax=1,
-          # Diverging aurora scale: cool cyan (hedging) ← neutral dark → warm coral (concentrated).
+          # Full aurora tri-color: violet (hedging) → cyan (independent) → gold (concentrated).
+          # Every value on the scale reads as an intentional, favorable brand color.
           colorscale=[
-              (0.0, "rgba(77,225,208,0.85)"),
-              (0.5, "rgba(28,26,40,0.95)"),
-              (1.0, "rgba(255,92,138,0.85)"),
+              (0.0, "rgba(139,123,247,0.85)"),  # ACCENT violet
+              (0.5, "rgba(77,225,208,0.75)"),   # ACCENT2 cyan
+              (1.0, "rgba(245,196,81,0.90)"),   # GOLD
           ],
           showscale=True,
           colorbar=dict(
               tickvals=[-1, 0, 1], ticktext=["−1", "0", "+1"],
               tickfont=dict(color=MUTED, size=10),
-              thickness=8, len=0.7, x=1.02, xpad=6, outlinewidth=0,
+              thickness=8, len=0.7, x=1.02, xpad=8, outlinewidth=0,
           ),
           hovertemplate="<b>%{y}</b> vs <b>%{x}</b><br>corr = %{z:+.2f}<extra></extra>",
-          xgap=3, ygap=3,
+          xgap=6, ygap=6,
       ))
       # Height scales with holdings count for a comfortable square-ish grid.
-      cell = 44
-      heat_h = max(240, cell * len(order) + 80)
+      cell = 48
+      heat_h = max(260, cell * len(order) + 90)
       heat.update_layout(
-          height=heat_h, margin=dict(l=6, r=6, t=6, b=6),
+          height=heat_h, margin=dict(l=6, r=10, t=10, b=6),
           paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
           font=dict(color=MUTED, family="Inter", size=11),
           xaxis=dict(side="top", tickfont=dict(color=TEXT, size=11), showgrid=False, ticks=""),
           yaxis=dict(autorange="reversed", tickfont=dict(color=TEXT, size=11), showgrid=False, ticks=""),
       )
-      st.plotly_chart(heat, width="stretch", config={"displayModeBar": False})
+      # Wrap in a keyed container to give the whole heatmap a soft rounded frame.
+      hmap_card = st.container(key="heatmap_card")
+      hmap_card.plotly_chart(heat, width="stretch", config={"displayModeBar": False})
 
 # ----------------------------------------------------------------------------
 # AI SENTIMENT
