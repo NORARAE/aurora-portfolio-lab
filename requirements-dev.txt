@@ -1,0 +1,6 @@
+# Dev-only dependencies. Kept separate from requirements.txt so the deployed
+# app (Streamlit Community Cloud) doesn't install lint/test tooling.
+#
+# Install with:  pip install -r requirements-dev.txt
+pytest==8.3.3
+ruff==0.7.0

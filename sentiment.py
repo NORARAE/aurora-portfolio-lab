@@ -21,8 +21,10 @@ notice it.
 """
 
 from __future__ import annotations
+
 import datetime as dt
 import os
+
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # VADER is trained on general/social text, so it's deaf to market jargon —

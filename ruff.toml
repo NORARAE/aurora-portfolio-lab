@@ -1,0 +1,20 @@
+# Minimal ruff config. We're not enforcing a strict style pass — just catching
+# real bugs (undefined names, unused imports) and obvious smells. Style-only
+# rules stay off so the app.py CSS-in-Python strings don't trigger noise.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+# E, F = pyflakes + pycodestyle basics.  W = warnings.  I = isort.
+# B = bugbear (real-code footguns).
+select = ["E", "F", "W", "I", "B"]
+# Ignore line-length in app.py (long CSS/HTML template strings are unavoidable).
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+"tests/*" = ["E402"]      # tests can do path shuffling before imports
+# app.py is a Streamlit view file: page_config must run first, palette blocks
+# use intentional semicolons to keep the color table visually aligned, and
+# CSS/HTML template strings use f-strings even when they have no {vars}.
+"app.py" = ["E402", "F401", "E702", "F541"]
