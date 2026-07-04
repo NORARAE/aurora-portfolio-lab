@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/NORARAE/aurora-portfolio-lab/actions/workflows/ci.yml"><img src="https://github.com/NORARAE/aurora-portfolio-lab/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.13-blue" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue" alt="Python">
   <img src="https://img.shields.io/badge/streamlit-1.58-ff4b4b" alt="Streamlit">
   <img src="https://img.shields.io/badge/tests-37%20passing-brightgreen" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
@@ -127,7 +127,7 @@ file.
 
 ## Quick start
 
-Requires Python 3.11 or 3.13.
+Requires Python 3.12 or 3.13 (`numpy 2.5` needs 3.12+).
 
 ```bash
 git clone https://github.com/NORARAE/aurora-portfolio-lab.git
@@ -163,14 +163,15 @@ pytest -v tests/                      # 37 tests, ~0.3s
 ruff check .                          # lint
 ```
 
-CI runs the same set on Python 3.11 and 3.13 on every push to `main`.
+CI runs the same set on Python 3.12 and 3.13 on every push to `main`.
 
 ## Deploying to Streamlit Community Cloud
 
 1. Push to a **public GitHub repo** (this one works).
 2. Go to <https://streamlit.io/cloud> and sign in with GitHub.
 3. Click **New app**, pick the repo + branch (`main`), and set the
-   entrypoint to `app.py`. Python version: **3.11**.
+   entrypoint to `app.py`. Python version: **3.13** (already pinned in
+   `.python-version` — Streamlit Cloud auto-detects it).
 4. (Optional) Under **Advanced settings → Secrets**, paste your
    `ANTHROPIC_API_KEY` and `QUIKTURN_KEY` in TOML format:
    ```toml
