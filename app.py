@@ -339,6 +339,64 @@ st.markdown(f"""
     background: linear-gradient(180deg, rgba(38,34,58,0.9), rgba(23,20,35,0.95));
     box-shadow: 0 4px 14px -10px rgba(139,123,247,0.5);
   }}
+
+  /* AI briefing hero card — the interpretive layer between the raw number
+     and the chart. Distinct from other cards via a live-pulse dot and a
+     slightly warmer inner glow that says "there's a model behind this". */
+  .ai-briefing {{ position: relative; margin: 0.6rem 0 0.7rem 0;
+    padding: 0.95rem 1.1rem 0.85rem 1.1rem;
+    background: linear-gradient(180deg, rgba(31,28,48,0.9), rgba(21,19,31,0.98));
+    border: 1px solid {BORDER}; border-radius: 14px;
+    overflow: hidden;
+  }}
+  .ai-briefing::before {{ content: ""; position: absolute;
+    inset: 0 0 auto 0; height: 2px;
+    background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+    opacity: 0.9;
+  }}
+  .ai-briefing::after {{ content: ""; position: absolute;
+    top: -60px; right: -60px; width: 220px; height: 220px;
+    background: radial-gradient(circle at center,
+      rgba(139,123,247,0.14) 0%, rgba(77,225,208,0.05) 50%, transparent 75%);
+    pointer-events: none;
+  }}
+  .ai-briefing-head {{ display: flex; align-items: center; gap: 0.55rem;
+    margin-bottom: 0.5rem; position: relative; z-index: 1; flex-wrap: wrap;
+  }}
+  .ai-mark {{ display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.18rem 0.5rem 0.18rem 0.42rem;
+    background: linear-gradient(135deg, rgba(139,123,247,0.22), rgba(77,225,208,0.18));
+    border: 1px solid rgba(139,123,247,0.35);
+    border-radius: 999px;
+    color: {TEXT}; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }}
+  .ai-mark::before {{ content: ""; display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: {ACCENT2}; box-shadow: 0 0 10px {ACCENT2};
+    animation: aiPulse 2.4s ease-in-out infinite;
+  }}
+  @keyframes aiPulse {{
+    0%, 100% {{ opacity: 0.55; transform: scale(1); }}
+    50%      {{ opacity: 1;    transform: scale(1.25); }}
+  }}
+  .ai-title {{ color: {TEXT}; font-size: 0.86rem; font-weight: 700;
+    letter-spacing: 0.02em;
+  }}
+  .ai-engine {{ margin-left: auto; color: {MUTED};
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }}
+  .ai-engine.is-claude {{ color: {ACCENT2}; }}
+  .ai-body {{ color: {TEXT}; font-size: 0.94rem; line-height: 1.55;
+    letter-spacing: 0.005em; position: relative; z-index: 1;
+    max-width: 78ch;
+  }}
+  @media (max-width: 640px) {{
+    .ai-body {{ font-size: 0.88rem; }}
+    .ai-engine {{ margin-left: 0; width: 100%; }}
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -977,6 +1035,75 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 last_bar = full.index.max().strftime("%b %d, %Y") if not full.empty else "n/a"
 st.caption(f"Last market data: {last_bar} · Refreshed {dt.datetime.now().strftime('%I:%M %p').lstrip('0')}")
+
+# ----------------------------------------------------------------------------
+# AI BRIEFING (interpretive layer between the raw number and the chart)
+# ----------------------------------------------------------------------------
+# Compute the facts the briefing needs. finance_metrics is cheap to call twice
+# — the stat-cards block below runs the same summary_metrics() and gets it
+# straight from pandas — and Streamlit's own rerun caching amortizes it.
+_brief_metrics = fm.summary_metrics(port_growth, risk_free_rate=rf)
+_brief_per = fm.per_ticker_returns(view) if not view.empty else {}
+if _brief_per:
+    _best_t = max(_brief_per, key=lambda t: _brief_per[t])
+    _worst_t = min(_brief_per, key=lambda t: _brief_per[t])
+else:
+    _best_t = _worst_t = None
+
+_brief_sortino = _brief_metrics.get("sortino")
+_brief_ctx = {
+    "period": period,
+    "amount": amount,
+    "current_value": current_value,
+    "total_return": change_pct,
+    "vs_savings": vs_savings,
+    "savings_apy": savings_apy,
+    "has_bench": has_bench,
+    "alpha_pct": alpha_pct if has_bench else 0.0,
+    "bench_return": bench_return if has_bench else 0.0,
+    "sharpe": float(_brief_metrics.get("sharpe", 0.0)),
+    "max_dd": float(_brief_metrics.get("max_drawdown", 0.0)),
+    # inf serializes weirdly to JSON — replace with None for the prompt.
+    "sortino": None if _brief_sortino in (None, float("inf")) else float(_brief_sortino),
+    "best_ticker": _best_t,
+    "best_return": float(_brief_per[_best_t]) if _best_t else 0.0,
+    "worst_ticker": _worst_t,
+    "worst_return": float(_brief_per[_worst_t]) if _worst_t else 0.0,
+    "holdings_count": len(view.columns),
+}
+
+# Cache by a hashable tuple so an unchanged portfolio doesn't re-hit Claude on
+# every widget interaction. 10-minute TTL keeps prose fresh without churn.
+@st.cache_data(show_spinner=False, ttl=600)
+def _cached_briefing(items: tuple) -> dict:
+    return sent.portfolio_briefing(dict(items))
+
+try:
+    _brief_key = tuple(sorted((k, v) for k, v in _brief_ctx.items()
+                              if not isinstance(v, (list, dict))))
+    _brief = _cached_briefing(_brief_key)
+except Exception:
+    # Never let the briefing take down the dashboard.
+    _brief = {"engine": "template", "text": sent._briefing_template(_brief_ctx)}
+
+_brief_engine = _brief.get("engine", "template")
+_brief_text = _brief.get("text", "").strip()
+if _brief_text:
+    if _brief_engine == "claude":
+        _engine_label, _engine_cls = "Claude Sonnet · live read", "is-claude"
+    else:
+        _engine_label, _engine_cls = "Rule-based read", ""
+    st.markdown(
+        f'<div class="ai-briefing">'
+        f'  <div class="ai-briefing-head">'
+        f'    <span class="ai-mark">✦ AI</span>'
+        f'    <span class="ai-title">Portfolio briefing</span>'
+        f'    <span class="ai-engine {_engine_cls}">{esc(_engine_label)}</span>'
+        f'  </div>'
+        f'  <div class="ai-body">{esc(_brief_text)}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 fig = go.Figure()
 # Vertical "aurora glow" under the line: solid near the price, fading to nothing

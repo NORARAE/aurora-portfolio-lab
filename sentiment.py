@@ -23,6 +23,7 @@ notice it.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -376,3 +377,152 @@ def tone_for(score: float) -> str:
     if score > -0.35:
         return "Negative"
     return "Very negative"
+
+
+# ---------------------------------------------------------------------------
+# AI PORTFOLIO BRIEFING
+# ---------------------------------------------------------------------------
+# Natural-language read of the portfolio's headline numbers, shown in the app's
+# top hero card. Uses Claude when ANTHROPIC_API_KEY is present (richer, more
+# fluent prose), otherwise falls back to a rule-based template that still reads
+# coherently. Same "degrade gracefully" pattern as score_vader / score_claude
+# above — no key means no crash, just a slightly less fancy paragraph.
+
+
+def _fmt_money(v: float) -> str:
+    """$-formatted number with a leading minus for losses (never a parenthesis)."""
+    if v is None:
+        return "$0"
+    n = abs(float(v))
+    s = f"${n:,.0f}"
+    return f"−{s}" if float(v) < 0 else s
+
+
+def _fmt_pct(v: float) -> str:
+    """Signed percent with one decimal — reads as '+12.4%' or '−3.1%'."""
+    if v is None:
+        return "0.0%"
+    return f"{float(v) * 100:+.1f}%"
+
+
+def _risk_read(sharpe: float) -> str:
+    """One short phrase describing the risk-adjusted return band."""
+    if sharpe >= 1.5:
+        return "excellent risk-adjusted returns"
+    if sharpe >= 1.0:
+        return "solid risk-adjusted returns"
+    if sharpe >= 0.5:
+        return "modest reward for the risk taken"
+    if sharpe >= 0:
+        return "thin reward for the risk carried"
+    return "returns lagging the risk taken"
+
+
+def _briefing_template(c: dict) -> str:
+    """
+    Rule-based fallback briefing. Reads as three natural sentences covering
+    performance, benchmark comparison, and risk / winners-losers.
+    Kept deliberately factual — no financial advice, no hedging.
+    """
+    ret = float(c.get("total_return", 0.0))
+    cur = float(c.get("current_value", 0.0))
+    amt = float(c.get("amount", 0.0))
+    per = str(c.get("period", "the window"))
+
+    # Sentence 1 — headline performance.
+    verb = "grew to" if ret >= 0 else "fell to"
+    sent1 = f"Your {_fmt_money(amt)} portfolio {verb} {_fmt_money(cur)} ({_fmt_pct(ret)}) over the last {per}."
+
+    # Sentence 2 — benchmark commentary (savings + S&P 500 when available).
+    parts = []
+    vs_sav = c.get("vs_savings")
+    if vs_sav is not None:
+        sav_apy = float(c.get("savings_apy", 0.045))
+        if float(vs_sav) >= 0:
+            parts.append(
+                f"That's {_fmt_money(vs_sav)} ahead of a {sav_apy * 100:.1f}% savings account"
+            )
+        else:
+            parts.append(
+                f"That's {_fmt_money(abs(float(vs_sav)))} behind a {sav_apy * 100:.1f}% savings account"
+            )
+    if c.get("has_bench"):
+        alpha = float(c.get("alpha_pct", 0.0))
+        if parts:
+            parts.append(f"and {_fmt_pct(alpha)} vs. the S&P 500")
+        else:
+            parts.append(f"The portfolio is {_fmt_pct(alpha)} vs. the S&P 500 this window")
+    sent2 = (", ".join(parts) + ".") if parts else ""
+
+    # Sentence 3 — risk read + best/worst holding when there's more than one.
+    sharpe = float(c.get("sharpe", 0.0))
+    max_dd = float(c.get("max_dd", 0.0))
+    risk_phrase = _risk_read(sharpe)
+    best_t = c.get("best_ticker")
+    worst_t = c.get("worst_ticker")
+    best_r = c.get("best_return")
+    worst_r = c.get("worst_return")
+
+    sent3 = (
+        f"Sharpe of {sharpe:.2f} with a {abs(max_dd) * 100:.0f}% max drawdown suggests "
+        f"{risk_phrase}"
+    )
+    if best_t and worst_t and best_t != worst_t:
+        sent3 += (
+            f" — {best_t} led at {_fmt_pct(best_r)} while {worst_t} lagged at {_fmt_pct(worst_r)}."
+        )
+    elif best_t:
+        sent3 += f" — {best_t} returned {_fmt_pct(best_r)} in this window."
+    else:
+        sent3 += "."
+
+    return " ".join(s for s in [sent1, sent2, sent3] if s)
+
+
+def _briefing_claude(context: dict) -> str | None:
+    """Optional Claude-authored version. Returns None on any failure so the
+    caller silently falls back to the template."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        facts = json.dumps(context, default=str, indent=2)
+        prompt = (
+            "You are a concise financial analyst writing for a personal "
+            "portfolio dashboard. Given these facts, write EXACTLY 3 short "
+            "sentences that tell the reader: (1) what happened over the "
+            "window, (2) how it compares to their benchmarks (savings and "
+            "S&P 500 when present), (3) the risk-adjusted read plus a "
+            "standout winner or loser. Be direct — no hedging language, no "
+            "financial advice, no disclaimers. Ticker symbols in ALL CAPS. "
+            "Use $ and % naturally. Do not use bullet points or headers.\n\n"
+            f"Facts:\n{facts}\n\n"
+            "Return only the 3-sentence briefing."
+        )
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=280,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = msg.content[0].text.strip()
+        return text or None
+    except Exception:
+        # Network / auth / SDK-version issue: silently fall back.
+        return None
+
+
+def portfolio_briefing(context: dict) -> dict:
+    """
+    Return {'engine': 'claude'|'template', 'text': str}. Never raises.
+
+    `context` is a dict of pre-computed portfolio facts (see app.py for the
+    exact shape). The function is deliberately dumb about the numbers — it
+    just formats them; the app is responsible for computing them correctly.
+    """
+    claude_text = _briefing_claude(context)
+    if claude_text:
+        return {"engine": "claude", "text": claude_text}
+    return {"engine": "template", "text": _briefing_template(context)}
