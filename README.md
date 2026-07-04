@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://aurora-portfolio-lab.streamlit.app/"><img src="https://img.shields.io/badge/Live_demo-Streamlit_Cloud-8b7bf7?logo=streamlit&logoColor=white" alt="Live demo"></a>
   <a href="https://github.com/NORARAE/aurora-portfolio-lab/actions/workflows/ci.yml"><img src="https://github.com/NORARAE/aurora-portfolio-lab/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-blue" alt="Python">
   <img src="https://img.shields.io/badge/streamlit-1.58-ff4b4b" alt="Streamlit">
@@ -17,7 +18,7 @@
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
 
-**Live demo:** _add your Streamlit Community Cloud URL here once deployed_ ·
+**Live demo:** <https://aurora-portfolio-lab.streamlit.app/> ·
 **Signature:** [PlayPlayCode](https://www.linkedin.com/in/ngenetti/)
 
 ---
@@ -42,6 +43,7 @@ the presentation.
 <td width="50%">
 
 **Live market data**
+
 - Equities and crypto tickers via `yfinance`
 - 6 preset baskets: AI leaders, FAANG+, Crypto majors, dividend blues, 60/40 balanced, S&P only
 - Percent or dollar allocation, drag-to-rebalance sliders
@@ -51,6 +53,7 @@ the presentation.
 <td width="50%">
 
 **Real risk math** (in [`finance_metrics.py`](finance_metrics.py))
+
 - CAGR, Sharpe, Sortino, drawdown, recovery days
 - Rolling volatility + rolling Sharpe
 - SPY benchmark overlay + alpha vs. market
@@ -62,6 +65,7 @@ the presentation.
 <td width="50%">
 
 **AI briefing** (in [`sentiment.py`](sentiment.py))
+
 - 3-sentence natural-language read of the portfolio
 - Uses **Claude Sonnet** when `ANTHROPIC_API_KEY` is set
 - Falls back to a rule-based template (never crashes)
@@ -71,6 +75,7 @@ the presentation.
 <td width="50%">
 
 **News sentiment (Aurora Oracle)**
+
 - Headline sentiment via VADER (finance-tuned lexicon)
 - Source-credibility weighting (Reuters, Bloomberg, WSJ…)
 - Tap-to-filter tone tabs (Bullish / Bearish / Neutral)
@@ -82,6 +87,7 @@ the presentation.
 <td width="50%">
 
 **Shareable URLs**
+
 - Every view encodes to a link (`?t=NVDA,BTC-USD&p=6M&i=25000`)
 - Full round-trip: tickers, weights, range, investment
 - One-click copy from the sidebar
@@ -90,6 +96,7 @@ the presentation.
 <td width="50%">
 
 **Polished UX**
+
 - Aurora dark palette (violet + cyan + gold)
 - Tactile `:active` click feedback on every card
 - Keyboard-visible `:focus-visible` rings
