@@ -2181,6 +2181,14 @@ st.markdown(f"""
     font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
   }}
   .credits-by b {{ color: {TEXT}; font-weight: 700; letter-spacing: 0.01em; }}
+  .credits .credits-by a,
+  .credits .credits-by a:visited {{
+    color: {GOLD}; text-decoration: none; font-weight: 700;
+    letter-spacing: 0.02em; border-bottom: 1px dotted rgba(245,196,81,0.35);
+    padding-bottom: 1px; transition: color 0.15s ease, border-color 0.15s ease;
+  }}
+  .credits .credits-by a:hover {{ color: {ACCENT2};
+    border-bottom-color: rgba(77,225,208,0.55); }}
   .credits-actions {{ display: flex; flex-wrap: wrap; gap: 0.45rem;
     justify-content: flex-end; }}
   .cta, .credits a.cta, .credits a.cta:visited {{
@@ -2253,7 +2261,8 @@ st.markdown(
     f'    </div>'
     f'  </div>'
     f'  <div class="credits-links">'
-    f'    <div class="credits-by">Designed + coded by <b>Nora Genetti</b></div>'
+    f'    <div class="credits-by">designed + coded by '
+    f'<a href="https://www.linkedin.com/in/ngenetti/" target="_blank" rel="noopener">PlayPlayCode ↗</a></div>'
     f'    <div class="credits-actions">'
     f'      <a class="cta cta-primary" href="https://github.com/NORARAE/aurora-portfolio-lab"'
     f'         target="_blank" rel="noopener">{_github_svg} View source ↗</a>'
