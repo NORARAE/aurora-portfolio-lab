@@ -801,6 +801,8 @@ loading_hint = st.empty()
 loading_hint.caption("Refreshing market data and recalculating dashboard metrics...")
 with st.spinner("Loading market data…"):
     full = load_prices(tuple(tickers))
+    # Cached separately so adding/removing holdings doesn't refetch the benchmark.
+    bench_full = load_prices(("SPY",))
 loading_hint.empty()
 
 if full.empty:
@@ -826,6 +828,12 @@ value_series = port_growth * amount
 savings_series = fm.savings_benchmark(value_series.index, amount, savings_apy)
 real_series = fm.real_value_series(value_series, inflation)
 
+# Benchmark: S&P 500 ("SPY") re-based to the same starting amount and window.
+# Empty when the fetch failed or when the user's own portfolio is just SPY.
+bench_prices = bench_full["SPY"] if (not bench_full.empty and "SPY" in bench_full.columns) else pd.Series(dtype=float)
+bench_series = fm.benchmark_growth(bench_prices, value_series.index, amount)
+has_bench = not bench_series.empty and not (len(tickers) == 1 and tickers[0].upper() == "SPY")
+
 current_value = float(value_series.iloc[-1])
 change_dollars = current_value - amount
 change_pct = float(port_growth.iloc[-1] - 1)
@@ -836,6 +844,10 @@ real_final = float(real_series.iloc[-1])
 real_return = real_final / amount - 1
 savings_final = float(savings_series.iloc[-1])
 vs_savings = current_value - savings_final
+bench_final = float(bench_series.iloc[-1]) if has_bench else 0.0
+vs_bench = current_value - bench_final if has_bench else 0.0
+bench_return = (bench_final / amount - 1) if has_bench else 0.0
+alpha_pct = (change_pct - bench_return) if has_bench else 0.0
 
 # ----------------------------------------------------------------------------
 # HERO
@@ -867,7 +879,14 @@ fig.add_trace(go.Scatter(x=savings_series.index, y=savings_series, mode="lines",
     name=f"Savings @ {savings_apy*100:.1f}%",
     line=dict(color=GOLD, width=1.4, dash="dash"),
     hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>Savings</extra>"))
+if has_bench:
+    fig.add_trace(go.Scatter(x=bench_series.index, y=bench_series, mode="lines",
+        name="S&P 500",
+        line=dict(color=ACCENT2, width=1.6, dash="dot"),
+        hovertemplate="%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>S&P 500</extra>"))
 series_range = [value_series, savings_series]
+if has_bench:
+    series_range.append(bench_series)
 if show_real:
     fig.add_trace(go.Scatter(x=real_series.index, y=real_series, mode="lines",
         name="Real (infl-adj)", line=dict(color=ACCENT, width=1.6),
@@ -893,6 +912,15 @@ st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 # VERDICT STRIP (the everyday "was it worth it?" answer)
 # ----------------------------------------------------------------------------
 beat = vs_savings >= 0
+beat_market = vs_bench >= 0
+bench_card = (
+    f'<div class="vcard">'
+    f'<div class="vlabel">vs. S&amp;P 500</div>'
+    f'<div class="vmain {"up-t" if beat_market else "down-t"}">'
+    f'{"+" if beat_market else "−"}{money(abs(vs_bench))}</div>'
+    f'<div class="vsub">Alpha of {pct(alpha_pct)} vs the market this window</div>'
+    f'</div>'
+) if has_bench else ""
 st.markdown(f"""
 <div class="verdict">
   <div class="vcard">
@@ -900,6 +928,7 @@ st.markdown(f"""
     <div class="vmain {'up-t' if beat else 'down-t'}">{'+'if beat else '−'}{money(abs(vs_savings))}</div>
     <div class="vsub">{'Ahead of' if beat else 'Behind'} a {savings_apy*100:.1f}% savings account</div>
   </div>
+  {bench_card}
   <div class="vcard">
     <div class="vlabel">Real return · after {inflation*100:.1f}% inflation</div>
     <div class="vmain {'up-t' if real_return>=0 else 'down-t'}">{pct(real_return)}</div>
@@ -1219,6 +1248,109 @@ fig2.update_layout(
     hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER),
 )
 st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
+
+# ----------------------------------------------------------------------------
+# ROLLING RISK VITALS (30-day rolling volatility + Sharpe, side-by-side)
+# ----------------------------------------------------------------------------
+# Only meaningful once we have at least a full window of days after the pct_change.
+if len(port_growth) >= 45:
+  st.markdown('<div class="section" style="margin-top:0.6rem">Rolling risk vitals · last 30 trading days</div>', unsafe_allow_html=True)
+  st.caption("Volatility = how bumpy the ride is right now. Sharpe = return per unit of that risk. Rising Sharpe is being paid for the turbulence.")
+
+  roll_vol = fm.rolling_volatility(port_growth, window=30).dropna()
+  roll_shp = fm.rolling_sharpe(port_growth, window=30, risk_free_rate=rf).dropna()
+
+  def _sparkline(series, latest, tone_color, unit, title):
+      r, g, b = int(tone_color[1:3], 16), int(tone_color[3:5], 16), int(tone_color[5:7], 16)
+      f = go.Figure()
+      f.add_trace(go.Scatter(
+          x=series.index, y=series.values, mode="lines",
+          line=dict(color=tone_color, width=2.0, shape="spline"),
+          fill="tozeroy",
+          fillgradient=dict(type="vertical", colorscale=[
+              (0.0, f"rgba({r},{g},{b},0.00)"),
+              (1.0, f"rgba({r},{g},{b},0.28)")]),
+          hovertemplate="%{x|%b %d, %Y}<br><b>" + unit + "</b><extra></extra>",
+          showlegend=False,
+      ))
+      # Big current value + title, painted in the top-left of the sparkline.
+      f.add_annotation(
+          xref="paper", yref="paper", x=0.01, y=1.0, xanchor="left", yanchor="top",
+          text=f"<span style='color:{MUTED};font-size:10px;letter-spacing:0.14em;'>{title.upper()}</span><br>"
+               f"<b style='color:{tone_color};font-size:20px;'>{latest}</b>",
+          showarrow=False, align="left",
+      )
+      f.update_layout(
+          height=140, margin=dict(l=0, r=0, t=6, b=0),
+          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+          font=dict(color=MUTED, family="Inter", size=10),
+          xaxis=dict(visible=False, showgrid=False),
+          yaxis=dict(visible=False, showgrid=False),
+          hovermode="x unified",
+          hoverlabel=dict(bgcolor=SURFACE2, font_color=TEXT, bordercolor=BORDER),
+      )
+      return f
+
+  rc1, rc2 = st.columns(2, gap="small")
+  with rc1:
+      latest_vol = float(roll_vol.iloc[-1]) if not roll_vol.empty else 0.0
+      # Muted violet fits "risk" — cold and neutral, not alarming.
+      st.plotly_chart(
+          _sparkline(roll_vol * 100, f"{latest_vol*100:.1f}%", ACCENT, "%{y:.1f}%", "Annualized volatility"),
+          width="stretch", config={"displayModeBar": False},
+      )
+  with rc2:
+      latest_shp = float(roll_shp.iloc[-1]) if not roll_shp.empty else 0.0
+      shp_color = UP if latest_shp >= 0.5 else (GOLD if latest_shp >= 0 else DOWN)
+      st.plotly_chart(
+          _sparkline(roll_shp, f"{latest_shp:+.2f}", shp_color, "%{y:.2f}", "Rolling Sharpe"),
+          width="stretch", config={"displayModeBar": False},
+      )
+
+# ----------------------------------------------------------------------------
+# CORRELATION HEATMAP (how holdings move together)
+# ----------------------------------------------------------------------------
+if len(tickers) >= 2:
+  corr = fm.correlation_matrix(view)
+  if not corr.empty:
+      st.markdown('<div class="section" style="margin-top:0.6rem">Correlation · how your holdings move together</div>', unsafe_allow_html=True)
+      st.caption("+1 (warm) = they rise and fall together, so gains and losses stack up. 0 (dark) = independent. −1 (cool) = they hedge each other.")
+      order = list(corr.columns)
+      lbls = [label(t) for t in order]
+      z = corr.values.tolist()
+      # Text overlay for each cell — small mono, TEXT on strong cells, MUTED on weak.
+      text = [[f"{corr.iloc[i,j]:+.2f}" for j in range(len(order))] for i in range(len(order))]
+      heat = go.Figure(go.Heatmap(
+          z=z, x=lbls, y=lbls, text=text, texttemplate="%{text}",
+          textfont=dict(family="ui-monospace, SFMono-Regular, Menlo, monospace",
+                        size=12, color=TEXT),
+          zmin=-1, zmid=0, zmax=1,
+          # Diverging aurora scale: cool cyan (hedging) ← neutral dark → warm coral (concentrated).
+          colorscale=[
+              (0.0, "rgba(77,225,208,0.85)"),
+              (0.5, "rgba(28,26,40,0.95)"),
+              (1.0, "rgba(255,92,138,0.85)"),
+          ],
+          showscale=True,
+          colorbar=dict(
+              tickvals=[-1, 0, 1], ticktext=["−1", "0", "+1"],
+              tickfont=dict(color=MUTED, size=10),
+              thickness=8, len=0.7, x=1.02, xpad=6, outlinewidth=0,
+          ),
+          hovertemplate="<b>%{y}</b> vs <b>%{x}</b><br>corr = %{z:+.2f}<extra></extra>",
+          xgap=3, ygap=3,
+      ))
+      # Height scales with holdings count for a comfortable square-ish grid.
+      cell = 44
+      heat_h = max(240, cell * len(order) + 80)
+      heat.update_layout(
+          height=heat_h, margin=dict(l=6, r=6, t=6, b=6),
+          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+          font=dict(color=MUTED, family="Inter", size=11),
+          xaxis=dict(side="top", tickfont=dict(color=TEXT, size=11), showgrid=False, ticks=""),
+          yaxis=dict(autorange="reversed", tickfont=dict(color=TEXT, size=11), showgrid=False, ticks=""),
+      )
+      st.plotly_chart(heat, width="stretch", config={"displayModeBar": False})
 
 # ----------------------------------------------------------------------------
 # AI SENTIMENT

@@ -244,3 +244,65 @@ def real_value_series(value_series: pd.Series, annual_inflation: float) -> pd.Se
     years = (idx - idx[0]).days.to_numpy().astype(float) / 365.0
     deflator = (1 + annual_inflation) ** years
     return pd.Series(value_series.to_numpy() / deflator, index=idx)
+
+
+def benchmark_growth(prices: pd.Series, index: pd.DatetimeIndex,
+                     amount: float) -> pd.Series:
+    """
+    'What if you'd put the same money into a market index like SPY instead?'
+    Align a benchmark price series to the portfolio's date range, normalize it
+    to start at 1, and scale to the same starting dollar amount. This is the
+    fair 'did you actually beat the market?' comparison line.
+    """
+    if prices.empty or index.empty:
+        return pd.Series(dtype=float, index=index)
+    aligned = prices.reindex(index).ffill().bfill()
+    if aligned.empty or aligned.iloc[0] == 0 or pd.isna(aligned.iloc[0]):
+        return pd.Series(dtype=float, index=index)
+    return (aligned / aligned.iloc[0]) * amount
+
+
+def rolling_volatility(prices: pd.Series, window: int = 30) -> pd.Series:
+    """
+    Annualized volatility computed over a rolling window — a "how bumpy is the
+    ride *right now*?" line, instead of a single number for the whole period.
+    A rising line = the market is getting choppier; falling = calming down.
+    """
+    rets = daily_returns(prices)
+    if rets.empty:
+        return pd.Series(dtype=float)
+    return rets.rolling(window).std() * np.sqrt(TRADING_DAYS)
+
+
+def rolling_sharpe(prices: pd.Series, window: int = 30,
+                   risk_free_rate: float = 0.04) -> pd.Series:
+    """
+    Rolling Sharpe ratio: return-per-unit-of-risk over a moving window.
+    Positive and rising = the portfolio is being *paid* for the risk it's
+    taking. Negative = you're taking risk without reward.
+    """
+    rets = daily_returns(prices)
+    if rets.empty:
+        return pd.Series(dtype=float)
+    rf_daily = (1 + risk_free_rate) ** (1 / TRADING_DAYS) - 1
+    excess = rets - rf_daily
+    mean = excess.rolling(window).mean()
+    std = excess.rolling(window).std()
+    # Guard against divide-by-zero on flat windows.
+    ratio = (mean / std.replace(0, np.nan)) * np.sqrt(TRADING_DAYS)
+    return ratio
+
+
+def correlation_matrix(price_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    How closely each pair of holdings moves together, on a scale of −1 to +1.
+    +1 = they always rise/fall together (concentrated risk — bad for
+    diversification). 0 = independent. −1 = they hedge each other.
+    Computed on daily returns, not prices, so trend size doesn't dominate.
+    """
+    if price_df.empty or len(price_df.columns) < 2:
+        return pd.DataFrame()
+    rets = price_df.ffill().bfill().pct_change().dropna(how="all")
+    if rets.empty:
+        return pd.DataFrame()
+    return rets.corr()
