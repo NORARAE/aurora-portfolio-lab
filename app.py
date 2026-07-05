@@ -36,6 +36,7 @@ for _k in ("ANTHROPIC_API_KEY", "QUIKTURN_KEY"):
         pass
 
 import finance_metrics as fm
+import paper_broker as pb
 import sentiment as sent
 
 st.set_page_config(
@@ -555,12 +556,14 @@ st.markdown(f"""
     animation: marqueeScroll 55s linear infinite;
   }}
   .marquee:hover .marquee-track {{ animation-play-state: paused; }}
-  /* Each item is now a link — click adds the symbol to the portfolio. */
+  /* Each item is a link — click opens the ticker detail page.
+     !important defeats Streamlit's default anchor styling which
+     otherwise repaints the item gold with an underline. */
   .marquee-item {{ display: inline-flex; align-items: center; gap: 0.45rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.78rem; letter-spacing: 0.02em;
     padding: 0.22rem 0.5rem; border-radius: 8px;
-    text-decoration: none; color: inherit;
+    text-decoration: none !important; color: inherit !important;
     border: 1px solid transparent;
     transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
   }}
@@ -582,6 +585,13 @@ st.markdown(f"""
   .marquee-change.up   {{ color: {UP};   background: rgba(22,199,132,0.14); }}
   .marquee-change.down {{ color: {DOWN}; background: rgba(234,57,67,0.14); }}
   .marquee-change.flat {{ color: {MUTED}; background: rgba(139,140,166,0.14); }}
+  /* Tiny state badges appended to marquee items — signals whether the
+     symbol is already in the analysis universe (●) or held as paper
+     shares (◆). Kept small so they read as metadata, not decoration. */
+  .marquee-badge {{ font-size: 0.6rem; color: {ACCENT2};
+    margin-left: 0.15rem; opacity: 0.9;
+  }}
+  .marquee-badge.paper {{ color: {GOLD}; }}
   @keyframes marqueeScroll {{
     0%   {{ transform: translateX(0); }}
     100% {{ transform: translateX(-50%); }}
@@ -589,6 +599,80 @@ st.markdown(f"""
   @media (prefers-reduced-motion: reduce) {{
     .marquee-track {{ animation: none; }}
     .marquee-status-dot {{ animation: none; }}
+  }}
+  /* Detail view (?view=SYM) — the click-through page from the marquee.
+     A back-link chip, a hero row (symbol + price + day change), a range
+     picker, then the candlestick, stats grid, and paper-trade panel. */
+  .back-link {{ display: inline-flex; align-items: center; gap: 0.4rem;
+    color: {MUTED} !important; text-decoration: none !important;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.75rem; border-radius: 999px;
+    border: 1px solid {BORDER}; background: rgba(255,255,255,0.02);
+    transition: color 140ms, border-color 140ms, background 140ms;
+  }}
+  .back-link:hover {{ color: {TEXT} !important; border-color: {ACCENT};
+    background: rgba(139,123,247,0.10);
+  }}
+  .detail-hero {{ display: flex; flex-wrap: wrap; align-items: flex-end;
+    gap: 1rem 1.4rem; margin: 0.9rem 0 0.4rem 0;
+  }}
+  .detail-sym {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.9rem; font-weight: 800; color: {TEXT}; letter-spacing: 0.02em;
+    line-height: 1;
+  }}
+  .detail-company {{ color: {MUTED}; font-size: 0.9rem; margin-top: 0.2rem; }}
+  .detail-price {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.5rem; font-weight: 700; color: {TEXT};
+  }}
+  .detail-change {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.55rem;
+    border-radius: 8px;
+  }}
+  .detail-change.up   {{ color: {UP};   background: rgba(22,199,132,0.14); }}
+  .detail-change.down {{ color: {DOWN}; background: rgba(234,57,67,0.14); }}
+  .detail-change.flat {{ color: {MUTED}; background: rgba(139,140,166,0.14); }}
+  .range-pill {{ display: inline-block; padding: 0.28rem 0.75rem;
+    margin-right: 0.35rem; border-radius: 999px;
+    border: 1px solid {BORDER}; background: rgba(255,255,255,0.02);
+    color: {MUTED} !important; font-size: 0.78rem; font-weight: 600;
+    text-decoration: none !important; letter-spacing: 0.05em;
+    transition: color 140ms, border-color 140ms, background 140ms;
+  }}
+  .range-pill:hover {{ color: {TEXT} !important; border-color: {ACCENT};
+    background: rgba(139,123,247,0.10);
+  }}
+  .range-pill.active {{ color: {TEXT} !important; border-color: {ACCENT};
+    background: rgba(139,123,247,0.18);
+  }}
+  /* Stats grid on the detail page — 4 columns on desktop, 2 on mobile. */
+  .stats-grid {{ display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem; margin: 0.9rem 0;
+  }}
+  .stat-cell {{ padding: 0.6rem 0.75rem; border-radius: 10px;
+    background: rgba(255,255,255,0.02); border: 1px solid {BORDER};
+  }}
+  .stat-label {{ color: {MUTED}; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }}
+  .stat-value {{ color: {TEXT}; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1rem; font-weight: 700; margin-top: 0.15rem;
+  }}
+  @media (max-width: 700px) {{
+    .stats-grid {{ grid-template-columns: repeat(2, 1fr); }}
+  }}
+  /* Paper-trade panel — cash + position header, then Buy/Sell inputs. */
+  .paper-header {{ display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem;
+    align-items: baseline; margin-bottom: 0.6rem;
+  }}
+  .paper-kicker {{ color: {GOLD}; font-size: 0.68rem; font-weight: 800;
+    letter-spacing: 0.18em; text-transform: uppercase;
+  }}
+  .paper-msg {{ padding: 0.5rem 0.75rem; border-radius: 8px;
+    background: rgba(139,123,247,0.10); border: 1px solid rgba(139,123,247,0.3);
+    color: {TEXT}; font-size: 0.85rem; margin: 0.4rem 0 0.6rem 0;
+  }}
+  .paper-msg.err {{ background: rgba(234,57,67,0.10);
+    border-color: rgba(234,57,67,0.35); color: {DOWN};
   }}
 </style>
 """, unsafe_allow_html=True)
@@ -623,6 +707,34 @@ MARQUEE_TICKERS: tuple[str, ...] = (
     "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META",
     "TSLA", "AMD", "JPM", "V", "WMT", "XOM", "BTC-USD", "ETH-USD",
 )
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_ohlcv(symbol: str, period: str, interval: str) -> pd.DataFrame:
+    """Fetch OHLCV bars for a single symbol. Used by the ticker detail
+    page for candlestick + volume rendering. Cached 10min so re-clicking
+    the range pills doesn't refire the network call."""
+    try:
+        h = yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=True)
+    except Exception:
+        return pd.DataFrame()
+    if h.empty:
+        return pd.DataFrame()
+    # Normalize tz so the x-axis compares cleanly with other series.
+    h.index = pd.to_datetime(h.index).tz_localize(None)
+    return h
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_ticker_info(symbol: str) -> dict:
+    """Fetch fundamentals (market cap, PE, div yield, 52w range, etc.).
+    yfinance's `.info` is flaky and slow — we cache 30min and swallow
+    errors so a missing datum never breaks the detail page."""
+    try:
+        info = yf.Ticker(symbol).info or {}
+    except Exception:
+        return {}
+    return dict(info)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -779,6 +891,409 @@ def remove_ticker(sym: str):
   cur = [t.strip().upper() for t in st.session_state.get("tickers_text", "").split(",") if t.strip()]
   nxt = [t for t in cur if t != sym]
   st.session_state.tickers_text = ", ".join(nxt)
+
+
+# ----------------------------------------------------------------------------
+# DETAIL VIEW — per-ticker page (chart + stats + paper trade)
+# ----------------------------------------------------------------------------
+# Range presets for the candlestick range picker. Tuple of
+# (label, yfinance period, yfinance interval). Intraday intervals kick
+# in for the 1D/5D ranges so the candles read as real trading action;
+# longer windows switch to daily/weekly to keep the chart readable.
+DETAIL_RANGES: list[tuple[str, str, str]] = [
+    ("1D", "1d", "5m"),
+    ("5D", "5d", "30m"),
+    ("1M", "1mo", "1d"),
+    ("6M", "6mo", "1d"),
+    ("1Y", "1y", "1d"),
+    ("5Y", "5y", "1wk"),
+]
+
+
+def _fmt_big(x: float | int | None, suffix: str = "") -> str:
+    """Human-readable large number: 1,240,000,000 → 1.24B. Returns '—' if None."""
+    if x is None or (isinstance(x, float) and (x != x)):  # None or NaN
+        return "—"
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return "—"
+    ax = abs(x)
+    if ax >= 1e12:
+        return f"{x/1e12:,.2f}T{suffix}"
+    if ax >= 1e9:
+        return f"{x/1e9:,.2f}B{suffix}"
+    if ax >= 1e6:
+        return f"{x/1e6:,.2f}M{suffix}"
+    if ax >= 1e3:
+        return f"{x/1e3:,.1f}K{suffix}"
+    return f"{x:,.2f}{suffix}"
+
+
+def _do_paper_buy(symbol: str, qty: float, price: float):
+    """Callback for the Buy button on the detail page."""
+    st.session_state.paper, st.session_state.paper_msg = pb.buy(
+        st.session_state.paper, symbol, qty, price
+    )
+
+
+def _do_paper_sell(symbol: str, qty: float, price: float):
+    """Callback for the Sell button on the detail page."""
+    st.session_state.paper, st.session_state.paper_msg = pb.sell(
+        st.session_state.paper, symbol, qty, price
+    )
+
+
+def render_detail_view(symbol: str) -> None:
+    """Ticker detail page: candlestick + stats + paper-trade panel.
+    Rendered inline below the marquee when ?view=SYM is set; callers
+    should st.stop() afterwards so the main dashboard doesn't re-render."""
+    symbol = symbol.upper().strip()
+
+    # --- Back link + range picker ---
+    range_key = str(st.query_params.get("r", "6M")).upper()
+    if range_key not in [r[0] for r in DETAIL_RANGES]:
+        range_key = "6M"
+    period, interval = next(
+        ((p, i) for k, p, i in DETAIL_RANGES if k == range_key),
+        ("6mo", "1d"),
+    )
+
+    hist = load_ohlcv(symbol, period, interval)
+    info = load_ticker_info(symbol)
+
+    st.markdown('<a href="?" target="_self" class="back-link">← Back to dashboard</a>',
+                unsafe_allow_html=True)
+
+    if hist.empty or "Close" not in hist:
+        st.error(f"Couldn't load market data for **{esc(symbol)}**. Try another ticker or a wider range.")
+        return
+
+    # --- Hero row: symbol, company name, current price, day change ---
+    close = float(hist["Close"].iloc[-1])
+    # Day change: prev bar for intraday, prev day for daily/weekly ranges.
+    if len(hist["Close"]) >= 2:
+        prev = float(hist["Close"].iloc[-2])
+        day_pct = (close / prev - 1.0) * 100.0 if prev else 0.0
+    else:
+        day_pct = 0.0
+    cls = "up" if day_pct > 0.05 else "down" if day_pct < -0.05 else "flat"
+    arrow = "▲" if day_pct > 0.05 else "▼" if day_pct < -0.05 else "·"
+    company = esc(info.get("shortName") or info.get("longName") or "")
+
+    st.markdown(
+        f'<div class="detail-hero">'
+        f'  <div>'
+        f'    <div class="detail-sym">{esc(label(symbol))}</div>'
+        f'    <div class="detail-company">{company}</div>'
+        f'  </div>'
+        f'  <div class="detail-price">${close:,.2f}</div>'
+        f'  <div class="detail-change {cls}">{arrow} {abs(day_pct):.2f}%</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Range pills — each links to the same page with a new ?r= param ---
+    _pills = "".join(
+        f'<a class="range-pill{" active" if k == range_key else ""}" '
+        f'href="?view={esc(symbol)}&r={k}" target="_self">{k}</a>'
+        for k, _p, _i in DETAIL_RANGES
+    )
+    st.markdown(f'<div style="margin: 0.4rem 0 0.6rem 0">{_pills}</div>',
+                unsafe_allow_html=True)
+
+    # --- Candlestick + volume chart ---
+    from plotly.subplots import make_subplots
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True,
+        row_heights=[0.78, 0.22], vertical_spacing=0.02,
+    )
+    fig.add_trace(go.Candlestick(
+        x=hist.index,
+        open=hist["Open"], high=hist["High"],
+        low=hist["Low"], close=hist["Close"],
+        increasing_line_color=UP, increasing_fillcolor=UP,
+        decreasing_line_color=DOWN, decreasing_fillcolor=DOWN,
+        name=label(symbol), showlegend=False,
+    ), row=1, col=1)
+    # Volume bars colored by up/down day.
+    if "Volume" in hist.columns:
+        colors = [
+            UP if c >= o else DOWN
+            for o, c in zip(hist["Open"], hist["Close"], strict=False)
+        ]
+        fig.add_trace(go.Bar(
+            x=hist.index, y=hist["Volume"],
+            marker_color=colors, marker_line_width=0,
+            opacity=0.55, showlegend=False, name="Volume",
+        ), row=2, col=1)
+    fig.update_layout(
+        height=460, margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=TEXT, family="ui-monospace, Menlo, monospace"),
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+    )
+    fig.update_xaxes(showgrid=False, color=MUTED, row=1, col=1)
+    fig.update_xaxes(showgrid=False, color=MUTED, row=2, col=1)
+    fig.update_yaxes(gridcolor="rgba(255,255,255,0.05)", color=MUTED, row=1, col=1)
+    fig.update_yaxes(showgrid=False, color=MUTED, row=2, col=1)
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+    # --- Stats grid ---
+    def _cell(lbl: str, val: str) -> str:
+        return f'<div class="stat-cell"><div class="stat-label">{esc(lbl)}</div><div class="stat-value">{val}</div></div>'
+    lo52 = info.get("fiftyTwoWeekLow")
+    hi52 = info.get("fiftyTwoWeekHigh")
+    mcap = info.get("marketCap")
+    pe = info.get("trailingPE") or info.get("forwardPE")
+    beta = info.get("beta")
+    dyield = info.get("dividendYield")
+    avol = info.get("averageVolume10days") or info.get("averageVolume")
+    range52 = (
+        f"${lo52:,.2f} — ${hi52:,.2f}"
+        if isinstance(lo52, (int, float)) and isinstance(hi52, (int, float))
+        else "—"
+    )
+    stats_html = "".join([
+        _cell("52-week range", range52),
+        _cell("Market cap", _fmt_big(mcap, "")),
+        _cell("P/E (trailing)", f"{pe:,.2f}" if isinstance(pe, (int, float)) else "—"),
+        _cell("Beta", f"{beta:,.2f}" if isinstance(beta, (int, float)) else "—"),
+        _cell("Dividend yield",
+              f"{dyield*100:,.2f}%" if isinstance(dyield, (int, float)) else "—"),
+        _cell("Avg volume (10d)", _fmt_big(avol)),
+        _cell("Day open", f"${float(hist['Open'].iloc[-1]):,.2f}"),
+        _cell("Day high / low",
+              f"${float(hist['High'].iloc[-1]):,.2f} / ${float(hist['Low'].iloc[-1]):,.2f}"),
+    ])
+    st.markdown(f'<div class="stats-grid">{stats_html}</div>', unsafe_allow_html=True)
+
+    # --- Paper-trade panel ---
+    account = st.session_state.paper
+    pos = account["positions"].get(symbol)
+    held_qty = float(pos["qty"]) if pos else 0.0
+    avg_cost = (pos["cost_basis"] / pos["qty"]) if (pos and pos["qty"]) else 0.0
+    market_val = held_qty * close
+    unreal = market_val - (pos["cost_basis"] if pos else 0.0)
+    unreal_pct = (unreal / pos["cost_basis"] * 100.0) if (pos and pos["cost_basis"]) else 0.0
+    unreal_cls = "up" if unreal > 0.005 else "down" if unreal < -0.005 else "flat"
+    unreal_sign = "+" if unreal >= 0 else "-"
+
+    st.markdown('<div class="section">Paper trade</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="paper-header">'
+        f'  <div><span class="paper-kicker">Cash</span><br>'
+        f'    <span class="detail-price">${account["cash"]:,.2f}</span></div>'
+        f'  <div><span class="paper-kicker">Position</span><br>'
+        f'    <span class="detail-price">{held_qty:g} sh</span>'
+        f'    <span class="detail-company"> · avg ${avg_cost:,.2f}</span></div>'
+        f'  <div><span class="paper-kicker">Market value</span><br>'
+        f'    <span class="detail-price">${market_val:,.2f}</span></div>'
+        f'  <div><span class="paper-kicker">Unrealized P/L</span><br>'
+        f'    <span class="detail-change {unreal_cls}">'
+        f'{unreal_sign}${abs(unreal):,.2f} ({unreal_sign}{abs(unreal_pct):.2f}%)</span></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Consume any pending trade message once, then clear so it doesn't stick.
+    if st.session_state.paper_msg:
+        cls = "err" if any(w in st.session_state.paper_msg for w in
+                           ("Not enough", "must be", "required")) else ""
+        st.markdown(
+            f'<div class="paper-msg {cls}">{esc(st.session_state.paper_msg)}</div>',
+            unsafe_allow_html=True,
+        )
+        st.session_state.paper_msg = ""
+
+    max_affordable = int(account["cash"] // close) if close > 0 else 0
+    tcol1, tcol2, tcol3 = st.columns([1.2, 1.2, 2])
+    with tcol1:
+        buy_qty = st.number_input(
+            "Shares to buy", min_value=0, max_value=max(max_affordable, 0),
+            value=min(10, max_affordable), step=1, key=f"buy_qty_{symbol}",
+            help=f"Max you can afford at ${close:,.2f}: {max_affordable:,}",
+        )
+        st.button(
+            f"Buy {buy_qty} @ ${close:,.2f}",
+            key=f"buy_btn_{symbol}",
+            on_click=_do_paper_buy,
+            args=(symbol, float(buy_qty), close),
+            disabled=(buy_qty <= 0 or buy_qty > max_affordable),
+            width="stretch",
+            type="primary",
+        )
+    with tcol2:
+        sell_qty = st.number_input(
+            "Shares to sell", min_value=0, max_value=int(held_qty) if held_qty > 0 else 0,
+            value=min(int(held_qty), 10) if held_qty > 0 else 0, step=1,
+            key=f"sell_qty_{symbol}",
+            help=f"You hold {held_qty:g}",
+        )
+        st.button(
+            f"Sell {sell_qty} @ ${close:,.2f}",
+            key=f"sell_btn_{symbol}",
+            on_click=_do_paper_sell,
+            args=(symbol, float(sell_qty), close),
+            disabled=(sell_qty <= 0 or sell_qty > held_qty),
+            width="stretch",
+        )
+    with tcol3:
+        st.caption(
+            "▲ Prices used are the last candle close — this is a paper game, "
+            "not a live broker. Zero commissions, zero slippage, instant fills. "
+            "Play as much as you want."
+        )
+        st.button(
+            "＋ Add to analysis universe",
+            key=f"add_uni_{symbol}",
+            on_click=add_ticker,
+            args=(symbol,),
+            width="stretch",
+            help="Adds this symbol to the main dashboard's portfolio analysis.",
+        )
+
+    # --- Trade history for this symbol ---
+    my_trades = [t for t in reversed(account["trades"]) if t["symbol"] == symbol]
+    if my_trades:
+        st.markdown('<div class="section">Recent trades · this symbol</div>',
+                    unsafe_allow_html=True)
+        trades_df = pd.DataFrame(my_trades[:8])[
+            ["ts", "side", "qty", "price", "total", "realized", "cash_after"]
+        ]
+        trades_df.columns = ["When", "Side", "Qty", "Price", "Total", "Realized", "Cash after"]
+        trades_df["When"] = trades_df["When"].str.replace("T", " ")
+        for c in ("Price", "Total", "Realized", "Cash after"):
+            trades_df[c] = trades_df[c].map(lambda v: f"${v:,.2f}")
+        st.dataframe(trades_df, hide_index=True, width="stretch")
+
+
+def _reset_paper_account():
+    """Callback: nuke the paper account back to $100k starting cash."""
+    st.session_state.paper = pb.default_account()
+    st.session_state.paper_msg = "Paper account reset — $100,000 cash restored."
+
+
+def render_account_view() -> None:
+    """?view=_account — paper portfolio overview: cash, holdings, P/L, trades.
+    Fetches a live price for every held symbol so the equity + unrealized
+    numbers are current. Rendered inline below the marquee; callers st.stop()."""
+    st.markdown('<a href="?" target="_self" class="back-link">← Back to dashboard</a>',
+                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="detail-hero">'
+        '  <div>'
+        '    <div class="detail-sym">◆ Paper account</div>'
+        '    <div class="detail-company">Zero-risk trading game · starts at $100,000 · resets any time</div>'
+        '  </div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    account = st.session_state.paper
+    held_syms = tuple(sorted(account["positions"].keys()))
+    # Live prices for every held symbol → drives equity + unrealized totals.
+    prices: dict[str, float] = {}
+    if held_syms:
+        px_df = load_prices(held_syms, years=1)
+        if not px_df.empty:
+            for s in held_syms:
+                if s in px_df.columns:
+                    prices[s] = float(px_df[s].dropna().iloc[-1])
+
+    summary = pb.account_summary(account, prices)
+
+    # Hero stats grid
+    def _cell(lbl: str, val: str) -> str:
+        return (
+            f'<div class="stat-cell"><div class="stat-label">{esc(lbl)}</div>'
+            f'<div class="stat-value">{val}</div></div>'
+        )
+    tr = summary["total_return"]
+    tr_sign = "+" if tr >= 0 else "-"
+    trp = summary["total_return_pct"] * 100
+    trp_sign = "+" if trp >= 0 else "-"
+    _eq = summary["equity"]
+    _cash = summary["cash"]
+    _pv = summary["positions_value"]
+    _unr = summary["unrealized"]
+    _real = summary["realized"]
+    cells = "".join([
+        _cell("Total equity", f"${_eq:,.2f}"),
+        _cell("Cash", f"${_cash:,.2f}"),
+        _cell("Positions value", f"${_pv:,.2f}"),
+        _cell("Total return",
+              f"{tr_sign}${abs(tr):,.2f} ({trp_sign}{abs(trp):.2f}%)"),
+        _cell("Unrealized P/L", f"${_unr:,.2f}"),
+        _cell("Realized P/L", f"${_real:,.2f}"),
+        _cell("Open positions", str(summary["n_positions"])),
+        _cell("Total trades", str(summary["n_trades"])),
+    ])
+    st.markdown(f'<div class="stats-grid">{cells}</div>', unsafe_allow_html=True)
+
+    # If a trade toast is pending from a prior action, show + clear it.
+    if st.session_state.paper_msg:
+        cls = "err" if any(w in st.session_state.paper_msg for w in
+                           ("Not enough", "must be", "required")) else ""
+        st.markdown(
+            f'<div class="paper-msg {cls}">{esc(st.session_state.paper_msg)}</div>',
+            unsafe_allow_html=True,
+        )
+        st.session_state.paper_msg = ""
+
+    # Holdings table
+    if account["positions"]:
+        st.markdown('<div class="section">Current holdings</div>', unsafe_allow_html=True)
+        rows = []
+        for s, p in sorted(account["positions"].items()):
+            px = prices.get(s)
+            avg = p["cost_basis"] / p["qty"] if p["qty"] else 0.0
+            mv = p["qty"] * px if px is not None else p["cost_basis"]
+            upl = mv - p["cost_basis"]
+            upl_pct = (upl / p["cost_basis"] * 100.0) if p["cost_basis"] else 0.0
+            rows.append({
+                "Symbol": s,
+                "Shares": f"{p['qty']:g}",
+                "Avg cost": f"${avg:,.2f}",
+                "Last price": f"${px:,.2f}" if px is not None else "—",
+                "Market value": f"${mv:,.2f}",
+                "Unrealized $": f"{'+' if upl >= 0 else '-'}${abs(upl):,.2f}",
+                "Unrealized %": f"{'+' if upl_pct >= 0 else '-'}{abs(upl_pct):.2f}%",
+                "Open": f'View →',
+            })
+        holdings_df = pd.DataFrame(rows)
+        st.dataframe(holdings_df, hide_index=True, width="stretch")
+        # Convenience chip row so users can jump to any held ticker's page.
+        st.caption("Jump to a holding:")
+        cols = st.columns(min(len(account["positions"]), 6))
+        for i, s in enumerate(sorted(account["positions"].keys())):
+            cols[i % len(cols)].markdown(
+                f'<a class="range-pill" href="?view={esc(s)}" target="_self">{esc(label(s))}</a>',
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("No paper positions yet. Click any ticker in the tape above to open its page, "
+                "then use the Buy button to place your first paper trade.")
+
+    # Full trade log
+    if account["trades"]:
+        st.markdown('<div class="section">Trade history</div>', unsafe_allow_html=True)
+        tlog = pd.DataFrame(reversed(account["trades"]))
+        tlog = tlog[["ts", "side", "symbol", "qty", "price", "total", "realized", "cash_after"]]
+        tlog.columns = ["When", "Side", "Symbol", "Qty", "Price", "Total", "Realized", "Cash after"]
+        tlog["When"] = tlog["When"].str.replace("T", " ")
+        tlog["Qty"] = tlog["Qty"].map(lambda v: f"{v:g}")
+        for c in ("Price", "Total", "Realized", "Cash after"):
+            tlog[c] = tlog[c].map(lambda v: f"${v:,.2f}")
+        st.dataframe(tlog, hide_index=True, width="stretch")
+
+    # Danger zone: reset. Nice to have because paper players will want to
+    # try a wildly different strategy without inheriting old losses.
+    with st.expander("⚠  Reset paper account"):
+        st.caption("This wipes all positions and trade history, restoring $100,000 cash.")
+        st.button("Reset to $100,000", key="reset_paper_btn",
+                  on_click=_reset_paper_account, width="stretch")
 
 
 def reset_portfolio_defaults():
@@ -990,6 +1505,13 @@ st.session_state.setdefault("show_real", False)
 st.session_state.setdefault("run_sentiment", True)
 st.session_state.setdefault("use_source_weighting", True)
 st.session_state.setdefault("period", "1Y")
+
+# Paper-trading account — one per browser session. Kept as a plain dict so
+# paper_broker.py stays framework-free and unit-testable.
+if "paper" not in st.session_state:
+    st.session_state.paper = pb.default_account()
+if "paper_msg" not in st.session_state:
+    st.session_state.paper_msg = ""  # last trade result — shown as a toast/pill
 
 # Consume inline holdings remove requests before tickers_text widget is instantiated.
 rm_req = str(st.query_params.get("rm", "")).strip().upper()
@@ -1372,6 +1894,24 @@ with st.popover("☰ Menu · Controls"):
     )
 
     st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="menu-group-title">Paper trading</div>', unsafe_allow_html=True)
+    _pa = st.session_state.paper
+    _pa_cash = _pa["cash"]
+    _pa_pos = len(_pa["positions"])
+    _pa_trades = len(_pa["trades"])
+    st.markdown(
+        f'<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        f'<span>Cash <b>${_pa_cash:,.2f}</b> · <b>{_pa_pos}</b> position{"s" if _pa_pos != 1 else ""} · '
+        f'<b>{_pa_trades}</b> trade{"s" if _pa_trades != 1 else ""}</span></div>'
+        f'<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        f'<span>Every ticker in the tape opens a chart + Buy/Sell page. Zero risk, real prices.</span></div>'
+        f'<div class="pop-links" style="margin-top:0.35rem">'
+        f'<a href="?view=_account" target="_self">Open account →</a>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
     st.markdown('<div class="menu-group-title">Learn more</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="pop-links">'
@@ -1394,6 +1934,7 @@ if _quotes:
         # Sub-$10 crypto/penny prices need decimals; everything else rounds.
         return f"${p:,.2f}" if p < 1000 else f"${p:,.0f}"
     _held_syms: set[str] = set(tickers)
+    _paper_syms: set[str] = set(st.session_state.paper["positions"].keys())
     _items = []
     for q in _quotes:
         _p = q["pct"]
@@ -1401,24 +1942,24 @@ if _quotes:
         arrow = "▲" if _p > 0.05 else "▼" if _p < -0.05 else "·"
         _sym = q["sym"]
         _t = q["ticker"]
-        _is_held = _t in _held_syms
+        _in_analysis = _t in _held_syms
+        _in_paper = _t in _paper_syms
         _base = (
             f'<span class="marquee-sym">{esc(_sym)}</span>'
             f'<span class="marquee-price">{_fmt_price(q["price"])}</span>'
             f'<span class="marquee-change {cls}">{arrow} {abs(_p):.2f}%</span>'
         )
-        if _is_held:
-            _items.append(
-                f'<span class="marquee-item held" title="Already in your portfolio">'
-                f'{_base}<span class="marquee-price" style="margin-left:0.2rem">✓</span>'
-                f'</span>'
-            )
-        else:
-            _items.append(
-                f'<a class="marquee-item" href="?add={esc(_t)}" '
-                f'target="_self" title="Click to add {esc(_sym)} to your portfolio">'
-                f'{_base}</a>'
-            )
+        # Small state badges: ● in analysis universe, ◆ in paper portfolio.
+        _badges = ""
+        if _in_analysis:
+            _badges += '<span class="marquee-badge" title="In analysis universe">●</span>'
+        if _in_paper:
+            _badges += '<span class="marquee-badge paper" title="Held in paper portfolio">◆</span>'
+        _items.append(
+            f'<a class="marquee-item" href="?view={esc(_t)}" '
+            f'target="_self" title="Open {esc(_sym)} — chart, stats &amp; paper trade">'
+            f'{_base}{_badges}</a>'
+        )
     # Duplicate the strip so translateX(-50%) leaves the seam invisible.
     _track = "".join(_items)
     _today = dt.date.today().strftime("%b %-d, %Y")
@@ -1428,7 +1969,7 @@ if _quotes:
         f'    <span class="marquee-status-dot"></span>'
         f'    <span class="marquee-status-label">Live market</span>'
         f'    <span>·</span><span>{_today}</span>'
-        f'    <span class="marquee-status-hint">Click a ticker to add it ↓</span>'
+        f'    <span class="marquee-status-hint">Click a ticker to open chart · stats · paper trade →</span>'
         f'  </div>'
         f'  <div class="marquee-scroll">'
         f'    <div class="marquee-track">{_track}{_track}</div>'
@@ -1436,6 +1977,25 @@ if _quotes:
         f'</div>',
         unsafe_allow_html=True,
     )
+
+# ROUTE: ?view=SYM opens the ticker detail page. ?view=_account opens the
+# paper-account overview. Both are inline branches that render below the
+# marquee and short-circuit the main dashboard so users focus on one thing.
+view_req = str(st.query_params.get("view", "")).strip()
+if view_req:
+    view_up = view_req.upper()
+    if view_up == "_ACCOUNT":
+        render_account_view()
+        st.stop()
+    # Only allow drilling into symbols in the curated marquee universe or
+    # the current analysis universe — prevents ?view=<html/js injection>.
+    _allowed = {t.upper() for t in MARQUEE_TICKERS} | set(tickers)
+    if view_up in _allowed:
+        render_detail_view(view_up)
+        st.stop()
+    else:
+        st.warning(f"Unknown ticker: {esc(view_req)}. Add it to your portfolio first, or pick one from the tape above.")
+        st.stop()
 
 h1, h2 = st.columns([3, 2])
 with h1:

@@ -22,9 +22,14 @@ data concepts in comments.
 - `sentiment.py` — news fetching + sentiment scoring. Two engines: VADER
   (default, offline) and Claude (optional, via `ANTHROPIC_API_KEY`). New
   sentiment logic goes here, not in `app.py`.
+- `paper_broker.py` — **pure functions** for the paper-trading game:
+  buy/sell, cost basis, P/L, account summaries. Zero Streamlit imports.
+  New trading rules go here, not in `app.py`. Full pytest coverage in
+  `tests/test_paper_broker.py`.
 
 When adding a feature, ask: is it *math* (→ finance_metrics), *AI/news* (→
-sentiment), or *presentation* (→ app)? Put it in the right file.
+sentiment), *trading logic* (→ paper_broker), or *presentation* (→ app)?
+Put it in the right file.
 
 ## How to run / verify
 
