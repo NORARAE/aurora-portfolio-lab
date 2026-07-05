@@ -16,11 +16,24 @@ Math lives in finance_metrics.py, AI in sentiment.py. This file is UI + flow.
 import datetime as dt
 import html
 import io
+import os
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+
+# Bridge Streamlit secrets into os.environ so downstream modules that read
+# os.environ (sentiment.py, logos.py) see keys set in the Streamlit Cloud
+# dashboard. Streamlit populates st.secrets but does NOT auto-export env vars.
+# Only sets a key if it's present in secrets AND not already in the env, so a
+# real shell env var still wins locally.
+for _k in ("ANTHROPIC_API_KEY", "QUIKTURN_KEY"):
+    try:
+        if _k in st.secrets and not os.environ.get(_k):
+            os.environ[_k] = str(st.secrets[_k])
+    except (FileNotFoundError, KeyError):
+        pass
 
 import finance_metrics as fm
 import sentiment as sent
