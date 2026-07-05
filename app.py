@@ -674,6 +674,24 @@ st.markdown(f"""
   .paper-msg.err {{ background: rgba(234,57,67,0.10);
     border-color: rgba(234,57,67,0.35); color: {DOWN};
   }}
+  /* Modal / dialog styling — overrides Streamlit's default light dialog so
+     the overlay reads as part of the aurora dashboard, not a system popup.
+     We hide the built-in close X because clicking it doesn't clear our
+     session_state.modal_kind — the modal would immediately reopen. Users
+     dismiss via our explicit Close button, which runs the callback. */
+  div[data-testid="stDialog"] > div,
+  div[role="dialog"] > div {{
+    background: linear-gradient(180deg, {SURFACE} 0%, {BG} 100%) !important;
+    border: 1px solid {BORDER} !important;
+    border-radius: 14px !important;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(139,123,247,0.18) !important;
+  }}
+  /* Hide Streamlit's built-in X (top-right of the dialog frame). */
+  div[data-testid="stDialog"] button[kind="header"],
+  div[role="dialog"] button[aria-label*="lose"] {{
+    display: none !important;
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -946,12 +964,14 @@ def _do_paper_sell(symbol: str, qty: float, price: float):
 
 def render_detail_view(symbol: str) -> None:
     """Ticker detail page: candlestick + stats + paper-trade panel.
-    Rendered inline below the marquee when ?view=SYM is set; callers
-    should st.stop() afterwards so the main dashboard doesn't re-render."""
+    Called inside an @st.dialog wrapper so it renders as an overlay on top
+    of the main dashboard. Range state is per-symbol in session_state so
+    switching windows doesn't lose the user's other selections."""
     symbol = symbol.upper().strip()
 
-    # --- Back link + range picker ---
-    range_key = str(st.query_params.get("r", "6M")).upper()
+    # Per-symbol range state — defaults to 6M on first open.
+    range_key_ss = f"detail_range_{symbol}"
+    range_key = st.session_state.get(range_key_ss, "6M")
     if range_key not in [r[0] for r in DETAIL_RANGES]:
         range_key = "6M"
     period, interval = next(
@@ -961,9 +981,6 @@ def render_detail_view(symbol: str) -> None:
 
     hist = load_ohlcv(symbol, period, interval)
     info = load_ticker_info(symbol)
-
-    st.markdown('<a href="?" target="_self" class="back-link">← Back to dashboard</a>',
-                unsafe_allow_html=True)
 
     if hist.empty or "Close" not in hist:
         st.error(f"Couldn't load market data for **{esc(symbol)}**. Try another ticker or a wider range.")
@@ -993,14 +1010,18 @@ def render_detail_view(symbol: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # --- Range pills — each links to the same page with a new ?r= param ---
-    _pills = "".join(
-        f'<a class="range-pill{" active" if k == range_key else ""}" '
-        f'href="?view={esc(symbol)}&r={k}" target="_self">{k}</a>'
-        for k, _p, _i in DETAIL_RANGES
+    # --- Range picker — segmented_control so it works inside a dialog
+    # (anchor pills would trigger a full-page nav out of the modal). ---
+    picked = st.segmented_control(
+        "Range",
+        options=[k for k, _p, _i in DETAIL_RANGES],
+        default=range_key,
+        key=f"seg_range_{symbol}",
+        label_visibility="collapsed",
     )
-    st.markdown(f'<div style="margin: 0.4rem 0 0.6rem 0">{_pills}</div>',
-                unsafe_allow_html=True)
+    if picked and picked != range_key:
+        st.session_state[range_key_ss] = picked
+        st.rerun()
 
     # --- Candlestick + volume chart ---
     from plotly.subplots import make_subplots
@@ -1028,7 +1049,7 @@ def render_detail_view(symbol: str) -> None:
             opacity=0.55, showlegend=False, name="Volume",
         ), row=2, col=1)
     fig.update_layout(
-        height=460, margin=dict(l=0, r=0, t=8, b=0),
+        height=380, margin=dict(l=0, r=0, t=8, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=TEXT, family="ui-monospace, Menlo, monospace"),
         xaxis_rangeslider_visible=False,
@@ -1175,12 +1196,16 @@ def _reset_paper_account():
     st.session_state.paper_msg = "Paper account reset — $100,000 cash restored."
 
 
+def _jump_to_ticker_modal(sym: str):
+    """Callback: switch the open modal from account view → this ticker's detail."""
+    st.session_state.modal_kind = "ticker"
+    st.session_state.modal_symbol = sym
+
+
 def render_account_view() -> None:
-    """?view=_account — paper portfolio overview: cash, holdings, P/L, trades.
-    Fetches a live price for every held symbol so the equity + unrealized
-    numbers are current. Rendered inline below the marquee; callers st.stop()."""
-    st.markdown('<a href="?" target="_self" class="back-link">← Back to dashboard</a>',
-                unsafe_allow_html=True)
+    """Paper portfolio overview: cash, holdings, P/L, trades.
+    Called inside an @st.dialog wrapper so it renders as a modal overlay.
+    Fetches a live price for every held symbol so equity is current."""
     st.markdown(
         '<div class="detail-hero">'
         '  <div>'
@@ -1264,17 +1289,22 @@ def render_account_view() -> None:
             })
         holdings_df = pd.DataFrame(rows)
         st.dataframe(holdings_df, hide_index=True, width="stretch")
-        # Convenience chip row so users can jump to any held ticker's page.
+        # Jump chips — buttons (not anchor links) so switching from the
+        # account modal into a ticker modal stays inside the overlay.
         st.caption("Jump to a holding:")
-        cols = st.columns(min(len(account["positions"]), 6))
-        for i, s in enumerate(sorted(account["positions"].keys())):
-            cols[i % len(cols)].markdown(
-                f'<a class="range-pill" href="?view={esc(s)}" target="_self">{esc(label(s))}</a>',
-                unsafe_allow_html=True,
+        held_sorted = sorted(account["positions"].keys())
+        cols = st.columns(min(len(held_sorted), 6))
+        for i, s in enumerate(held_sorted):
+            cols[i % len(cols)].button(
+                label(s),
+                key=f"jump_{s}",
+                on_click=_jump_to_ticker_modal,
+                args=(s,),
+                width="stretch",
             )
     else:
-        st.info("No paper positions yet. Click any ticker in the tape above to open its page, "
-                "then use the Buy button to place your first paper trade.")
+        st.info("No paper positions yet. Close this and click any ticker in the tape "
+                "to open its chart, then use the Buy button to place your first paper trade.")
 
     # Full trade log
     if account["trades"]:
@@ -1512,6 +1542,12 @@ if "paper" not in st.session_state:
     st.session_state.paper = pb.default_account()
 if "paper_msg" not in st.session_state:
     st.session_state.paper_msg = ""  # last trade result — shown as a toast/pill
+
+# Modal state — drives the ticker-detail and account overlays. Kept out
+# of query params so a page reload closes any open modal (cleaner UX
+# than a "sticky" modal that pops back after every refresh).
+st.session_state.setdefault("modal_kind", None)      # "ticker" | "account" | None
+st.session_state.setdefault("modal_symbol", None)    # active symbol when kind == "ticker"
 
 # Consume inline holdings remove requests before tickers_text widget is instantiated.
 rm_req = str(st.query_params.get("rm", "")).strip().upper()
@@ -1978,24 +2014,53 @@ if _quotes:
         unsafe_allow_html=True,
     )
 
-# ROUTE: ?view=SYM opens the ticker detail page. ?view=_account opens the
-# paper-account overview. Both are inline branches that render below the
-# marquee and short-circuit the main dashboard so users focus on one thing.
+# ROUTE: ?view=SYM opens the ticker detail page as a modal overlay.
+# ?view=_account opens the paper-account overview modal. We hydrate the
+# modal state from the URL, clear the query param so a refresh doesn't
+# re-trigger, and rerun with a clean URL. The modal itself renders further
+# down the page — after the main dashboard is drawn — so users see the
+# dashboard in the background instead of leaving it.
 view_req = str(st.query_params.get("view", "")).strip()
 if view_req:
-    view_up = view_req.upper()
-    if view_up == "_ACCOUNT":
-        render_account_view()
-        st.stop()
-    # Only allow drilling into symbols in the curated marquee universe or
-    # the current analysis universe — prevents ?view=<html/js injection>.
-    _allowed = {t.upper() for t in MARQUEE_TICKERS} | set(tickers)
-    if view_up in _allowed:
-        render_detail_view(view_up)
-        st.stop()
+    if view_req.upper() == "_ACCOUNT":
+        st.session_state.modal_kind = "account"
+        st.session_state.modal_symbol = None
     else:
-        st.warning(f"Unknown ticker: {esc(view_req)}. Add it to your portfolio first, or pick one from the tape above.")
-        st.stop()
+        _allowed = {t.upper() for t in MARQUEE_TICKERS} | set(tickers)
+        if view_req.upper() in _allowed:
+            st.session_state.modal_kind = "ticker"
+            st.session_state.modal_symbol = view_req.upper()
+        else:
+            st.warning(f"Unknown ticker: {esc(view_req)}. Add it to your portfolio first, or pick one from the tape above.")
+    try:
+        del st.query_params["view"]
+    except Exception:
+        st.query_params.clear()
+    st.rerun()
+
+
+# --- Modal dialog definitions ---
+# Streamlit's @st.dialog decorator makes the function render as an overlay
+# with a translucent backdrop. We define once at module scope and invoke
+# conditionally based on session state further down.
+@st.dialog(" ", width="large")
+def _ticker_modal(sym: str):
+    render_detail_view(sym)
+    st.divider()
+    if st.button("✕  Close", key=f"close_ticker_{sym}", width="stretch"):
+        st.session_state.modal_kind = None
+        st.session_state.modal_symbol = None
+        st.rerun()
+
+
+@st.dialog(" ", width="large")
+def _account_modal():
+    render_account_view()
+    st.divider()
+    if st.button("✕  Close", key="close_account", width="stretch"):
+        st.session_state.modal_kind = None
+        st.session_state.modal_symbol = None
+        st.rerun()
 
 h1, h2 = st.columns([3, 2])
 with h1:
@@ -3458,3 +3523,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.caption("For learning / portfolio use only — not financial advice.")
+
+# ----------------------------------------------------------------------------
+# MODAL OVERLAY — rendered LAST so the entire dashboard is drawn behind it.
+# Streamlit's @st.dialog opens as an overlay with backdrop dim. Users can
+# see their portfolio charts blurred behind the ticker detail / account view.
+# ----------------------------------------------------------------------------
+if st.session_state.modal_kind == "ticker" and st.session_state.modal_symbol:
+    _ticker_modal(st.session_state.modal_symbol)
+elif st.session_state.modal_kind == "account":
+    _account_modal()
