@@ -456,6 +456,41 @@ st.markdown(f"""
     }}
     .ai-title {{ -webkit-text-fill-color: {TEXT}; color: {TEXT}; }}
   }}
+
+  /* Ticker tape — real-time market marquee at the very top of the page.
+     Two identical tracks side-by-side, translated -50% over 55s so the
+     seam is invisible. Pauses on hover so a reader can read a price. */
+  .marquee {{ position: relative; overflow: hidden;
+    background: linear-gradient(180deg, rgba(31,28,48,0.7), rgba(21,19,31,0.85));
+    border: 1px solid {BORDER}; border-radius: 12px;
+    margin: 0 0 0.6rem 0; padding: 0.42rem 0;
+    mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+  }}
+  .marquee-track {{ display: inline-flex; gap: 1.4rem; padding-left: 1.4rem;
+    white-space: nowrap; will-change: transform;
+    animation: marqueeScroll 55s linear infinite;
+  }}
+  .marquee:hover .marquee-track {{ animation-play-state: paused; }}
+  .marquee-item {{ display: inline-flex; align-items: center; gap: 0.45rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem; letter-spacing: 0.02em;
+  }}
+  .marquee-sym {{ color: {TEXT}; font-weight: 700; letter-spacing: 0.05em; }}
+  .marquee-price {{ color: {MUTED}; font-weight: 500; }}
+  .marquee-change {{ padding: 0.08rem 0.4rem; border-radius: 6px;
+    font-weight: 700; font-size: 0.72rem;
+  }}
+  .marquee-change.up   {{ color: {UP};   background: rgba(22,199,132,0.14); }}
+  .marquee-change.down {{ color: {DOWN}; background: rgba(234,57,67,0.14); }}
+  .marquee-change.flat {{ color: {MUTED}; background: rgba(139,140,166,0.14); }}
+  @keyframes marqueeScroll {{
+    0%   {{ transform: translateX(0); }}
+    100% {{ transform: translateX(-50%); }}
+  }}
+  @media (prefers-reduced-motion: reduce) {{
+    .marquee-track {{ animation: none; }}
+  }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -481,6 +516,37 @@ def load_prices(tickers: tuple[str, ...], years: int = 5) -> pd.DataFrame:
         except Exception:
             pass
     return pd.DataFrame(frames).dropna(how="all") if frames else pd.DataFrame()
+
+
+# Ticker tape symbols — a curated cross-section (mega-cap tech, index ETFs,
+# blue chips, majors, crypto) so the marquee reads as "the market" at a glance.
+MARQUEE_TICKERS: tuple[str, ...] = (
+    "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META",
+    "TSLA", "AMD", "JPM", "V", "WMT", "XOM", "BTC-USD", "ETH-USD",
+)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_marquee_quotes(tickers: tuple[str, ...]) -> list[dict]:
+    """Return [{sym, price, pct}] for each ticker, using a 5-day window so we
+    always get 'yesterday close → latest' even on Mondays and holidays.
+    Fails silently per ticker so one bad symbol never blanks the whole tape."""
+    out: list[dict] = []
+    for t in tickers:
+        try:
+            h = yf.Ticker(t).history(period="5d", auto_adjust=True)
+            if h.empty or "Close" not in h or len(h) < 2:
+                continue
+            closes = h["Close"].dropna()
+            if len(closes) < 2:
+                continue
+            price = float(closes.iloc[-1])
+            prev = float(closes.iloc[-2])
+            pct = (price / prev - 1.0) * 100.0 if prev else 0.0
+            out.append({"sym": t.replace("-USD", ""), "price": price, "pct": pct})
+        except Exception:
+            continue
+    return out
 
 
 def slice_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
@@ -582,6 +648,23 @@ def add_ticker(sym: str):
     if sym not in cur:
         cur.append(sym)
         st.session_state.tickers_text = ", ".join(cur)
+
+
+# ----------------------------------------------------------------------------
+# TICKER LIBRARY — categorized universe for the sidebar "Browse" picker.
+# Curated so every symbol here is liquid, well-known, and works on yfinance
+# out of the box (crypto uses the -USD suffix).
+# ----------------------------------------------------------------------------
+TICKER_LIBRARY: dict[str, list[str]] = {
+    "AI & Semis":  ["NVDA", "AMD", "TSM", "AVGO", "PLTR", "SMCI", "ANET", "MU"],
+    "Big Tech":    ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NFLX", "ADBE", "ORCL"],
+    "ETFs":        ["SPY", "QQQ", "VOO", "VTI", "DIA", "IWM", "TLT", "GLD"],
+    "Finance":     ["JPM", "BAC", "GS", "MS", "BRK-B", "V", "MA", "SCHW"],
+    "Consumer":    ["WMT", "COST", "NKE", "MCD", "SBUX", "DIS", "HD", "LOW"],
+    "Dividends":   ["KO", "JNJ", "PG", "PEP", "T", "VZ", "MO", "XOM"],
+    "EV & Auto":   ["TSLA", "F", "GM", "RIVN", "LCID", "NIO"],
+    "Crypto":      ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD"],
+}
 
 
 def remove_ticker(sym: str):
@@ -843,6 +926,27 @@ with st.sidebar:
     for i, (sym, lbl) in enumerate(quick):
         qcols[i % 3].button(lbl, key=f"add_{sym}", on_click=add_ticker,
                             args=(sym,), width="stretch")
+
+    with st.expander("🔍 Browse tickers by category"):
+        st.caption("Tap any symbol to add it to your portfolio. Already-added symbols are skipped.")
+        _cat_names = list(TICKER_LIBRARY.keys())
+        _cat_tabs = st.tabs(_cat_names)
+        _held: set[str] = set(tickers)
+        for _tab, _cat in zip(_cat_tabs, _cat_names, strict=True):
+            with _tab:
+                _syms = TICKER_LIBRARY[_cat]
+                _cols = st.columns(3)
+                for _i, _sym in enumerate(_syms):
+                    _held_label = "✓ " if _sym in _held else "＋ "
+                    _display = _sym.replace("-USD", "")
+                    _cols[_i % 3].button(
+                        f"{_held_label}{_display}",
+                        key=f"lib_{_cat}_{_sym}",
+                        on_click=add_ticker,
+                        args=(_sym,),
+                        disabled=_sym in _held,
+                        width="stretch",
+                    )
 
     # --- Investment & allocation ------------------------------------------
     # Two lenses on the same split: percent weights OR dollar amounts. Either
@@ -1120,6 +1224,35 @@ with st.popover("✦ Menu"):
           disabled=not st.session_state.get("mini_run_sentiment", True),
         )
     st.caption("Full controls in the sidebar (‹ top-left)")
+
+# Live ticker tape — renders as the first thing on the page, above the
+# Aurora header. Fetches are cached for 5min; if the market API is down
+# (weekends, throttling) we quietly skip the tape rather than showing an
+# empty strip.
+_quotes = load_marquee_quotes(MARQUEE_TICKERS)
+if _quotes:
+    def _fmt_price(p: float) -> str:
+        # Sub-$10 crypto/penny prices need decimals; everything else rounds.
+        return f"${p:,.2f}" if p < 1000 else f"${p:,.0f}"
+    _items = []
+    for q in _quotes:
+        _p = q["pct"]
+        cls = "up" if _p > 0.05 else "down" if _p < -0.05 else "flat"
+        arrow = "▲" if _p > 0.05 else "▼" if _p < -0.05 else "·"
+        _items.append(
+            f'<span class="marquee-item">'
+            f'<span class="marquee-sym">{esc(q["sym"])}</span>'
+            f'<span class="marquee-price">{_fmt_price(q["price"])}</span>'
+            f'<span class="marquee-change {cls}">{arrow} {abs(_p):.2f}%</span>'
+            f'</span>'
+        )
+    # Duplicate the strip so translateX(-50%) leaves the seam invisible.
+    _track = "".join(_items)
+    st.markdown(
+        f'<div class="marquee" aria-label="Market ticker tape">'
+        f'<div class="marquee-track">{_track}{_track}</div></div>',
+        unsafe_allow_html=True,
+    )
 
 h1, h2 = st.columns([3, 2])
 with h1:
