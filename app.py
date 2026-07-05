@@ -526,7 +526,27 @@ st.markdown(f"""
   .marquee {{ position: relative; overflow: hidden;
     background: linear-gradient(180deg, rgba(31,28,48,0.7), rgba(21,19,31,0.85));
     border: 1px solid {BORDER}; border-radius: 12px;
-    margin: 0 0 0.6rem 0; padding: 0.42rem 0;
+    margin: 0 0 0.6rem 0;
+  }}
+  /* Status strip — sits above the scrolling track; live-dot + date + hint. */
+  .marquee-status {{ display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.32rem 0.7rem 0.28rem 0.7rem;
+    border-bottom: 1px solid {BORDER};
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: {MUTED};
+  }}
+  .marquee-status-dot {{ width: 6px; height: 6px; border-radius: 50%;
+    background: {UP}; box-shadow: 0 0 8px {UP};
+    animation: aiPulse 2.4s ease-in-out infinite;
+  }}
+  .marquee-status-label {{ color: {TEXT}; letter-spacing: 0.16em; }}
+  .marquee-status-hint {{ margin-left: auto; color: {MUTED};
+    font-weight: 600; letter-spacing: 0.08em; text-transform: none;
+    font-family: inherit; font-size: 0.68rem;
+  }}
+  .marquee-scroll {{ position: relative; overflow: hidden;
+    padding: 0.42rem 0;
     mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
     -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
   }}
@@ -535,9 +555,24 @@ st.markdown(f"""
     animation: marqueeScroll 55s linear infinite;
   }}
   .marquee:hover .marquee-track {{ animation-play-state: paused; }}
+  /* Each item is now a link — click adds the symbol to the portfolio. */
   .marquee-item {{ display: inline-flex; align-items: center; gap: 0.45rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.78rem; letter-spacing: 0.02em;
+    padding: 0.22rem 0.5rem; border-radius: 8px;
+    text-decoration: none; color: inherit;
+    border: 1px solid transparent;
+    transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+  }}
+  .marquee-item:hover, .marquee-item:focus-visible {{
+    background: rgba(139,123,247,0.12);
+    border-color: rgba(139,123,247,0.35);
+    transform: translateY(-1px);
+    outline: none;
+  }}
+  .marquee-item.held {{ opacity: 0.55; cursor: default; }}
+  .marquee-item.held:hover {{ background: transparent;
+    border-color: transparent; transform: none;
   }}
   .marquee-sym {{ color: {TEXT}; font-weight: 700; letter-spacing: 0.05em; }}
   .marquee-price {{ color: {MUTED}; font-weight: 500; }}
@@ -553,6 +588,7 @@ st.markdown(f"""
   }}
   @media (prefers-reduced-motion: reduce) {{
     .marquee-track {{ animation: none; }}
+    .marquee-status-dot {{ animation: none; }}
   }}
 </style>
 """, unsafe_allow_html=True)
@@ -591,8 +627,10 @@ MARQUEE_TICKERS: tuple[str, ...] = (
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_marquee_quotes(tickers: tuple[str, ...]) -> list[dict]:
-    """Return [{sym, price, pct}] for each ticker, using a 5-day window so we
-    always get 'yesterday close → latest' even on Mondays and holidays.
+    """Return [{sym, ticker, price, pct}] for each ticker, using a 5-day window
+    so we always get 'yesterday close → latest' even on Mondays and holidays.
+    - 'ticker' preserves the yfinance symbol (BTC-USD) for click-to-add.
+    - 'sym'    is the short display name (BTC) for the visual chip.
     Fails silently per ticker so one bad symbol never blanks the whole tape."""
     out: list[dict] = []
     for t in tickers:
@@ -606,10 +644,16 @@ def load_marquee_quotes(tickers: tuple[str, ...]) -> list[dict]:
             price = float(closes.iloc[-1])
             prev = float(closes.iloc[-2])
             pct = (price / prev - 1.0) * 100.0 if prev else 0.0
-            out.append({"sym": t.replace("-USD", ""), "price": price, "pct": pct})
+            out.append({
+                "sym": t.replace("-USD", ""),
+                "ticker": t,
+                "price": price,
+                "pct": pct,
+            })
         except Exception:
             continue
     return out
+
 
 
 def slice_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
@@ -953,6 +997,18 @@ if rm_req:
   remove_ticker(rm_req)
   try:
     del st.query_params["rm"]
+  except Exception:
+    st.query_params.clear()
+  st.rerun()
+
+# Consume inline click-to-add requests from the marquee tape. Validated
+# against the marquee universe so a hand-crafted URL can't inject arbitrary
+# symbols into the portfolio.
+add_req = str(st.query_params.get("add", "")).strip().upper()
+if add_req and add_req in {t.upper() for t in MARQUEE_TICKERS}:
+  add_ticker(add_req)
+  try:
+    del st.query_params["add"]
   except Exception:
     st.query_params.clear()
   st.rerun()
@@ -1337,23 +1393,47 @@ if _quotes:
     def _fmt_price(p: float) -> str:
         # Sub-$10 crypto/penny prices need decimals; everything else rounds.
         return f"${p:,.2f}" if p < 1000 else f"${p:,.0f}"
+    _held_syms: set[str] = set(tickers)
     _items = []
     for q in _quotes:
         _p = q["pct"]
         cls = "up" if _p > 0.05 else "down" if _p < -0.05 else "flat"
         arrow = "▲" if _p > 0.05 else "▼" if _p < -0.05 else "·"
-        _items.append(
-            f'<span class="marquee-item">'
-            f'<span class="marquee-sym">{esc(q["sym"])}</span>'
+        _sym = q["sym"]
+        _t = q["ticker"]
+        _is_held = _t in _held_syms
+        _base = (
+            f'<span class="marquee-sym">{esc(_sym)}</span>'
             f'<span class="marquee-price">{_fmt_price(q["price"])}</span>'
             f'<span class="marquee-change {cls}">{arrow} {abs(_p):.2f}%</span>'
-            f'</span>'
         )
+        if _is_held:
+            _items.append(
+                f'<span class="marquee-item held" title="Already in your portfolio">'
+                f'{_base}<span class="marquee-price" style="margin-left:0.2rem">✓</span>'
+                f'</span>'
+            )
+        else:
+            _items.append(
+                f'<a class="marquee-item" href="?add={esc(_t)}" '
+                f'target="_self" title="Click to add {esc(_sym)} to your portfolio">'
+                f'{_base}</a>'
+            )
     # Duplicate the strip so translateX(-50%) leaves the seam invisible.
     _track = "".join(_items)
+    _today = dt.date.today().strftime("%b %-d, %Y")
     st.markdown(
         f'<div class="marquee" aria-label="Market ticker tape">'
-        f'<div class="marquee-track">{_track}{_track}</div></div>',
+        f'  <div class="marquee-status">'
+        f'    <span class="marquee-status-dot"></span>'
+        f'    <span class="marquee-status-label">Live market</span>'
+        f'    <span>·</span><span>{_today}</span>'
+        f'    <span class="marquee-status-hint">Click a ticker to add it ↓</span>'
+        f'  </div>'
+        f'  <div class="marquee-scroll">'
+        f'    <div class="marquee-track">{_track}{_track}</div>'
+        f'  </div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
