@@ -200,8 +200,6 @@ CI runs the same set on Python 3.12 and 3.13 on every push to `main`.
 ## Credits
 
 - Design & engineering: [**PlayPlayCode**](https://www.linkedin.com/in/ngenetti/)
-- Crypto icons: [Cryptocurrency Icons](https://github.com/spothq/cryptocurrency-icons)
-  by spothq (CC0, public domain)
 
 ## Disclaimer
 
