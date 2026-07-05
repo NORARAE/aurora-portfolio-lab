@@ -361,17 +361,27 @@ st.markdown(f"""
     background: linear-gradient(180deg, rgba(31,28,48,0.9), rgba(21,19,31,0.98));
     border: 1px solid {BORDER}; border-radius: 14px;
     overflow: hidden;
+    animation: aiRise 620ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }}
+  /* Aurora rail: gradient is 2x wide + animated so the tri-color sweeps
+     left→right like a soft signal, without ever leaving the frame. */
   .ai-briefing::before {{ content: ""; position: absolute;
     inset: 0 0 auto 0; height: 2px;
-    background: linear-gradient(90deg, {ACCENT} 0%, {ACCENT2} 55%, {GOLD} 100%);
+    background: linear-gradient(90deg,
+      {ACCENT} 0%, {ACCENT2} 25%, {GOLD} 50%,
+      {ACCENT2} 75%, {ACCENT} 100%);
+    background-size: 200% 100%;
     opacity: 0.9;
+    animation: aiSweep 6.5s linear infinite;
   }}
+  /* Corner glow slowly breathes — same 6.5s cadence as the rail so the
+     card reads as one living thing rather than two independent tickers. */
   .ai-briefing::after {{ content: ""; position: absolute;
     top: -60px; right: -60px; width: 220px; height: 220px;
     background: radial-gradient(circle at center,
       rgba(139,123,247,0.14) 0%, rgba(77,225,208,0.05) 50%, transparent 75%);
     pointer-events: none;
+    animation: aiGlow 6.5s ease-in-out infinite;
   }}
   .ai-briefing-head {{ display: flex; align-items: center; gap: 0.55rem;
     margin-bottom: 0.5rem; position: relative; z-index: 1; flex-wrap: wrap;
@@ -393,8 +403,35 @@ st.markdown(f"""
     0%, 100% {{ opacity: 0.55; transform: scale(1); }}
     50%      {{ opacity: 1;    transform: scale(1.25); }}
   }}
+  @keyframes aiSweep {{
+    0%   {{ background-position:   0% 50%; }}
+    100% {{ background-position: 200% 50%; }}
+  }}
+  @keyframes aiGlow {{
+    0%, 100% {{ opacity: 0.85; transform: translate(0, 0) scale(1); }}
+    50%      {{ opacity: 1;    transform: translate(-8px, 6px) scale(1.06); }}
+  }}
+  @keyframes aiRise {{
+    0%   {{ opacity: 0; transform: translateY(6px); }}
+    100% {{ opacity: 1; transform: translateY(0); }}
+  }}
+  @keyframes aiSheen {{
+    0%   {{ background-position: -120% 0; }}
+    100% {{ background-position:  220% 0; }}
+  }}
+  /* Title gets a slow diagonal sheen — visible only as a subtle brighter
+     band that drifts across the text every ~7s. Falls back to solid TEXT
+     on browsers that can't do background-clip:text. */
   .ai-title {{ color: {TEXT}; font-size: 0.86rem; font-weight: 700;
     letter-spacing: 0.02em;
+    background: linear-gradient(90deg,
+      {TEXT} 0%, {TEXT} 40%,
+      #ffffff 50%,
+      {TEXT} 60%, {TEXT} 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: aiSheen 7s linear infinite;
   }}
   .ai-engine {{ margin-left: auto; color: {MUTED};
     font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em;
@@ -405,10 +442,19 @@ st.markdown(f"""
   .ai-body {{ color: {TEXT}; font-size: 0.94rem; line-height: 1.55;
     letter-spacing: 0.005em; position: relative; z-index: 1;
     max-width: 78ch;
+    animation: aiRise 720ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms both;
   }}
   @media (max-width: 640px) {{
     .ai-body {{ font-size: 0.88rem; }}
     .ai-engine {{ margin-left: 0; width: 100%; }}
+  }}
+  /* Respect user motion preferences — all animations become instant. */
+  @media (prefers-reduced-motion: reduce) {{
+    .ai-briefing, .ai-briefing::before, .ai-briefing::after,
+    .ai-mark::before, .ai-title, .ai-body {{
+      animation: none !important;
+    }}
+    .ai-title {{ -webkit-text-fill-color: {TEXT}; color: {TEXT}; }}
   }}
 </style>
 """, unsafe_allow_html=True)
