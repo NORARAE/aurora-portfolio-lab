@@ -42,6 +42,7 @@ st.set_page_config(
   page_title="Aurora · Portfolio Lab",
   page_icon="assets/diamond-favicon.svg",
   layout="wide",
+  initial_sidebar_state="expanded",
 )
 
 # --- Palette ---
