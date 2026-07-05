@@ -169,23 +169,31 @@ st.markdown(f"""
     line-height: 1.45;
   }}
   [data-testid="stMain"] [data-testid="stPopoverButton"] {{
-    min-height: 32px;
+    min-height: 34px;
     width: auto;
     min-width: fit-content;
     height: auto;
-    border-radius: 10px;
-    border: 1px solid {BORDER};
-    background: {SURFACE};
-    color: {MUTED};
-    padding: 0.2rem 0.62rem;
+    border-radius: 999px;
+    border: 1px solid rgba(139,123,247,0.5);
+    background: linear-gradient(135deg, rgba(139,123,247,0.22), rgba(77,225,208,0.16));
+    color: {TEXT};
+    padding: 0.28rem 0.85rem 0.28rem 0.7rem;
+    box-shadow: 0 6px 20px rgba(139,123,247,0.18);
+    transition: transform 120ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  }}
+  [data-testid="stMain"] [data-testid="stPopoverButton"]:hover {{
+    transform: translateY(-1px);
+    border-color: {ACCENT2};
+    box-shadow: 0 10px 26px rgba(77,225,208,0.24);
   }}
   [data-testid="stMain"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] p {{
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: {MUTED};
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: {TEXT};
     white-space: nowrap;
     line-height: 1;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }}
   [data-testid="stPopoverBody"] {{
     background: {SURFACE2};
@@ -264,6 +272,60 @@ st.markdown(f"""
   [data-testid="stSidebar"] .stButton button {{ background: {SURFACE2}; border: 1px solid {BORDER};
     color: {TEXT}; border-radius: 10px; font-size: 0.72rem; font-weight: 600; padding: 0.18rem 0; }}
   [data-testid="stSidebar"] .stButton button:hover {{ border-color: {ACCENT}; color: {ACCENT2}; }}
+
+  /* Sidebar collapse/reopen toggle — Streamlit's built-in chevron gets an
+     aurora glow so users can find it easily when the sidebar is closed. */
+  [data-testid="stSidebarCollapseButton"] button {{
+    background: linear-gradient(135deg, rgba(139,123,247,0.28), rgba(77,225,208,0.20)) !important;
+    border: 1px solid rgba(139,123,247,0.6) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 14px rgba(139,123,247,0.28) !important;
+    transition: transform 120ms ease, box-shadow 200ms ease !important;
+  }}
+  [data-testid="stSidebarCollapseButton"] button:hover {{
+    transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(77,225,208,0.35) !important;
+  }}
+  [data-testid="stSidebarCollapseButton"] button span {{
+    color: {TEXT} !important;
+  }}
+
+  /* Popover panels get an aurora-status hero at the top + neat tips section. */
+  .pop-hero {{ display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.58rem 0.7rem; margin: 0 0 0.7rem 0;
+    background: linear-gradient(135deg, rgba(139,123,247,0.14), rgba(77,225,208,0.10));
+    border: 1px solid rgba(139,123,247,0.28); border-radius: 12px;
+  }}
+  .pop-hero-dot {{ width: 8px; height: 8px; border-radius: 50%;
+    background: {ACCENT2}; box-shadow: 0 0 12px {ACCENT2};
+    animation: aiPulse 2.4s ease-in-out infinite;
+  }}
+  .pop-hero-dot.off {{ background: {MUTED}; box-shadow: none; animation: none; }}
+  .pop-hero-title {{ color: {TEXT}; font-size: 0.78rem; font-weight: 800;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }}
+  .pop-hero-engine {{ margin-left: auto; color: {ACCENT2};
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }}
+  .pop-hero-engine.template {{ color: {MUTED}; }}
+  .pop-tip {{ display: flex; gap: 0.5rem; align-items: flex-start;
+    padding: 0.35rem 0; color: {TEXT}; font-size: 0.82rem; line-height: 1.4;
+  }}
+  .pop-tip-icon {{ color: {ACCENT2}; font-weight: 700; flex-shrink: 0;
+    width: 1.2rem; text-align: center;
+  }}
+  .pop-links {{ display: flex; gap: 0.5rem; margin-top: 0.35rem; flex-wrap: wrap; }}
+  .pop-links a {{ flex: 1; min-width: 0;
+    padding: 0.42rem 0.6rem; border-radius: 10px;
+    background: {SURFACE}; border: 1px solid {BORDER};
+    color: {TEXT}; text-decoration: none;
+    font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em;
+    text-align: center; white-space: nowrap;
+    transition: border-color 140ms ease, color 140ms ease, transform 140ms ease;
+  }}
+  .pop-links a:hover {{ border-color: {ACCENT2}; color: {ACCENT2}; transform: translateY(-1px); }}
 
   /* Keep popover labels readable and avoid clipping on narrow controls. */
   [data-testid="stMain"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"] p {{
@@ -1080,7 +1142,21 @@ for _t in tickers:
     st.session_state[f"mini_pct_{_t}"] = int(st.session_state.get(f"pct_{_t}", 0))
     st.session_state[f"mini_amt_{_t}"] = float(st.session_state.get(f"amt_{_t}", 0.0))
 
-with st.popover("✦ Menu"):
+with st.popover("☰ Menu · Controls"):
+    # Aurora hero strip — throbbing dot mirrors the AI briefing chip so users
+    # instantly see whether Claude is live or the app is on the template.
+    _ai_active = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    _dot_cls = "" if _ai_active else "off"
+    _engine_txt = "Claude · live" if _ai_active else "Rule-based"
+    _engine_cls = "" if _ai_active else "template"
+    st.markdown(
+        f'<div class="pop-hero">'
+        f'  <span class="pop-hero-dot {_dot_cls}"></span>'
+        f'  <span class="pop-hero-title">AI briefing</span>'
+        f'  <span class="pop-hero-engine {_engine_cls}">{_engine_txt}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("Adjust your portfolio — changes apply instantly.")
 
     st.markdown('<div class="menu-group-title">Assets</div>', unsafe_allow_html=True)
@@ -1224,6 +1300,32 @@ with st.popover("✦ Menu"):
           args=("mini_use_source_weighting", "use_source_weighting"),
           disabled=not st.session_state.get("mini_run_sentiment", True),
         )
+
+    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="menu-group-title">Quick tips</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        '<span>Add crypto by suffixing <b>-USD</b> — <b>BTC-USD</b>, <b>ETH-USD</b>.</span></div>'
+        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        '<span>Try a preset basket (<b>Assets → Load a preset portfolio</b>) to see the AI read on a curated theme.</span></div>'
+        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        '<span>Copy the <b>Share this view</b> URL to save a portfolio configuration.</span></div>'
+        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
+        '<span>Hover any ticker on the tape to pause it and read the price.</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="menu-group-title">Learn more</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="pop-links">'
+        '<a href="https://github.com/NORARAE/aurora-portfolio-lab" target="_blank">GitHub ↗</a>'
+        '<a href="https://www.linkedin.com/in/ngenetti/" target="_blank">LinkedIn ↗</a>'
+        '<a href="https://github.com/NORARAE/aurora-portfolio-lab#readme" target="_blank">Docs ↗</a>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
     st.caption("Full controls in the sidebar (‹ top-left)")
 
 # Live ticker tape — renders as the first thing on the page, above the
