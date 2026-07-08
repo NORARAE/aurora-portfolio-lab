@@ -38,6 +38,8 @@ for _k in ("ANTHROPIC_API_KEY", "QUIKTURN_KEY"):
 import finance_metrics as fm
 import paper_broker as pb
 import sentiment as sent
+import store
+from nav import render_nav
 
 st.set_page_config(
   page_title="Aurora · Portfolio Lab",
@@ -1326,6 +1328,498 @@ def render_account_view() -> None:
                   on_click=_reset_paper_account, width="stretch")
 
 
+# ============================================================================
+# STORE-BACKED PAGES  (Watchlist · AI Insights · Providers · Wallet)
+# ----------------------------------------------------------------------------
+# These render in the main content area when the sidebar icon-nav selects a
+# non-"Home" page. They read/write *persisted* state through store.py (SQLite)
+# and deliberately keep their own namespaced widget keys, so they never collide
+# with the portfolio dashboard's session_state. The design stays minimalist:
+# purple by default, teal hover whispers, and gold reserved for the PAPER pill.
+# ============================================================================
+
+USER_ID = "local"  # single local user for now; store.py is keyed for more later
+
+# Page-scoped CSS. Injected once per page render (cheap, idempotent). Everything
+# here reuses the app's existing tokens so the pages read as the same product.
+_PAGE_CSS = f"""
+<style>
+  .page-head {{ display:flex; align-items:baseline; gap:0.7rem; flex-wrap:wrap;
+    margin: 0.2rem 0 0.2rem 0; }}
+  .page-title {{ font-size: clamp(1.4rem, 3.2vw, 1.9rem); font-weight: 800;
+    letter-spacing:-0.02em; color:{TEXT}; }}
+  .page-sub {{ color:{MUTED}; font-size:0.9rem; margin: 0.1rem 0 0.9rem 0;
+    max-width: 70ch; line-height:1.5; }}
+  .paper-pill {{ display:inline-flex; align-items:center; gap:0.35rem;
+    padding: 0.24rem 0.62rem; border-radius:999px; font-size:0.66rem;
+    font-weight:800; letter-spacing:0.16em; text-transform:uppercase;
+    color:{GOLD}; border:1px solid rgba(245,196,81,0.4);
+    background:rgba(245,196,81,0.08); }}
+  .wl-head {{ color:{MUTED}; font-size:0.66rem; font-weight:700;
+    letter-spacing:0.14em; text-transform:uppercase; padding: 0 0 0.2rem 0; }}
+  .wl-sym {{ font-weight:700; font-size:0.95rem; color:{TEXT}; }}
+  .wl-cell {{ font-size:0.9rem; color:{TEXT}; font-variant-numeric:tabular-nums;
+    padding-top:0.15rem; }}
+  .wl-chg.up {{ color:{UP}; }} .wl-chg.down {{ color:{DOWN}; }} .wl-chg.flat {{ color:{MUTED}; }}
+  .wl-senti {{ display:inline-block; padding:0.12rem 0.5rem; border-radius:999px;
+    font-size:0.74rem; font-weight:700; }}
+  .disclaimer {{ border-left:3px solid {ACCENT}; background:rgba(139,123,247,0.08);
+    color:{TEXT}; font-size:0.82rem; line-height:1.5; border-radius:0 10px 10px 0;
+    padding:0.6rem 0.85rem; margin:0.6rem 0; }}
+  .provider-row {{ display:flex; align-items:center; justify-content:space-between;
+    gap:0.75rem; padding:0.7rem 0.9rem; margin-bottom:0.45rem; background:{SURFACE};
+    border:1px solid {BORDER}; border-radius:12px; }}
+  .provider-name {{ font-weight:700; color:{TEXT}; font-size:0.92rem; }}
+  .provider-desc {{ color:{MUTED}; font-size:0.78rem; margin-top:0.1rem; line-height:1.4; }}
+  .provider-status {{ font-size:0.72rem; font-weight:800; letter-spacing:0.06em;
+    text-transform:uppercase; padding:0.24rem 0.6rem; border-radius:999px; white-space:nowrap; }}
+  .provider-status.on {{ color:{UP}; background:rgba(22,199,132,0.12); }}
+  .provider-status.off {{ color:{MUTED}; background:rgba(139,140,166,0.14); }}
+</style>
+"""
+
+
+def _page_header(title: str, subtitle: str, pill: str | None = None) -> None:
+    """Consistent title block for every store-backed page."""
+    st.markdown(_PAGE_CSS, unsafe_allow_html=True)
+    pill_html = f'<span class="paper-pill">◆ {esc(pill)}</span>' if pill else ""
+    st.markdown(
+        f'<div class="page-head"><span class="page-title">{esc(title)}</span>{pill_html}</div>'
+        f'<div class="page-sub">{esc(subtitle)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _symbol_sentiment(symbol: str) -> dict:
+    """Cached per-symbol sentiment (score + label), read straight from
+    sentiment.py. 15-min TTL so a busy watchlist doesn't hammer the news API.
+    Returns {} on any failure so a row never breaks the page."""
+    try:
+        res = sent.analyze(symbol, limit=6)
+        return {"score": float(res.get("score", 0.0)), "label": str(res.get("label", "—"))}
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _live_prices(symbols: tuple[str, ...]) -> dict[str, float]:
+    """Latest close per symbol, batched + cached. Used to value paper positions
+    and to price trades on the store-backed pages."""
+    out: dict[str, float] = {}
+    if not symbols:
+        return out
+    for q in load_marquee_quotes(symbols):
+        out[q["ticker"]] = float(q["price"])
+    return out
+
+
+def _senti_visual(score: float) -> tuple[str, str]:
+    """(css-color, background) for a sentiment chip based on its score."""
+    if score >= 0.1:
+        return UP, "rgba(22,199,132,0.14)"
+    if score <= -0.1:
+        return DOWN, "rgba(234,57,67,0.14)"
+    return MUTED, "rgba(139,140,166,0.14)"
+
+
+# --- Watchlist callbacks (run before widgets rebuild) -----------------------
+def _wl_add_star():
+    sym = str(st.session_state.get("wl_add_input", "")).strip().upper()
+    if sym:
+        store.add_star(USER_ID, sym)
+        st.session_state["wl_add_input"] = ""
+
+
+def _wl_remove_star(symbol: str):
+    store.remove_star(USER_ID, symbol)
+
+
+def _place_store_trade(msg_key: str, side: str, symbol: str, amount: float, price: float):
+    """Shared trade callback for the watchlist ticket + wallet swap. Stashes the
+    result dict under `msg_key` so the page can render a success/error pill."""
+    st.session_state[msg_key] = store.place_paper_trade(USER_ID, side, symbol, amount, price)
+
+
+def _render_trade_result(msg_key: str) -> None:
+    """Render + clear a pending place_paper_trade() result (success or error)."""
+    res = st.session_state.pop(msg_key, None)
+    if not res:
+        return
+    cls = "" if res.get("ok") else "err"
+    extra = f" · Cash now ${res['cash']:,.2f}" if res.get("ok") else ""
+    st.markdown(
+        f'<div class="paper-msg {cls}">{esc(res.get("message", ""))}{esc(extra)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_watchlist_page() -> None:
+    """Starred symbols with live price / 24h / AI sentiment, plus a
+    dollar-denominated paper-trade ticket. All state persists via store.py."""
+    _page_header(
+        "Watchlist",
+        "Star the symbols you're tracking. Prices and 24-hour moves are live; the "
+        "sentiment read comes from the same news engine as the dashboard.",
+        pill="Paper · fake money",
+    )
+
+    # Add-a-symbol row.
+    ac1, ac2 = st.columns([5, 1])
+    ac1.text_input(
+        "Add a symbol", key="wl_add_input", label_visibility="collapsed",
+        placeholder="Add a symbol — AAPL, NVDA, BTC-USD…",
+    )
+    ac2.button("★ Add", key="wl_add_btn", on_click=_wl_add_star, width="stretch")
+
+    symbols = store.get_watchlist(USER_ID)
+    if not symbols:
+        st.info("No symbols starred yet. Add one above — try AAPL, NVDA, or BTC-USD.")
+        return
+
+    quotes = {q["ticker"]: q for q in load_marquee_quotes(tuple(symbols))}
+    price_map = {s: quotes[s]["price"] for s in symbols if s in quotes}
+
+    # Column header.
+    st.markdown('<div class="section">Starred symbols</div>', unsafe_allow_html=True)
+    heads = st.columns([2.2, 2, 1.8, 3, 0.9])
+    for col, txt in zip(heads, ["Symbol", "Price", "24h", "Sentiment", ""], strict=True):
+        col.markdown(f'<div class="wl-head">{txt}</div>', unsafe_allow_html=True)
+
+    for sym in symbols:
+        q = quotes.get(sym)
+        senti = _symbol_sentiment(sym)
+        c = st.columns([2.2, 2, 1.8, 3, 0.9])
+        c[0].markdown(f'<div class="wl-sym">{esc(label(sym))}</div>', unsafe_allow_html=True)
+        if q:
+            p = q["price"]
+            price_txt = f"${p:,.2f}" if p < 1000 else f"${p:,.0f}"
+            pc = q["pct"]
+            chg_cls = "up" if pc > 0.05 else "down" if pc < -0.05 else "flat"
+            arrow = "▲" if pc > 0.05 else "▼" if pc < -0.05 else "·"
+            c[1].markdown(f'<div class="wl-cell">{price_txt}</div>', unsafe_allow_html=True)
+            c[2].markdown(
+                f'<div class="wl-cell wl-chg {chg_cls}">{arrow} {abs(pc):.2f}%</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            c[1].markdown('<div class="wl-cell" style="color:%s">—</div>' % MUTED, unsafe_allow_html=True)
+            c[2].markdown('<div class="wl-cell" style="color:%s">—</div>' % MUTED, unsafe_allow_html=True)
+        if senti:
+            col_c, bg_c = _senti_visual(senti["score"])
+            c[3].markdown(
+                f'<div class="wl-cell"><span class="wl-senti" style="color:{col_c};'
+                f'background:{bg_c};">{senti["score"]:+.2f} · {esc(senti["label"])}</span></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            c[3].markdown('<div class="wl-cell" style="color:%s">no coverage</div>' % MUTED, unsafe_allow_html=True)
+        c[4].button("★", key=f"wl_rm_{sym}", on_click=_wl_remove_star, args=(sym,),
+                    help=f"Remove {label(sym)} from watchlist", width="stretch")
+
+    # --- Paper-trade ticket --------------------------------------------------
+    st.markdown('<div class="section">Place a paper trade</div>', unsafe_allow_html=True)
+    _render_trade_result("wl_trade_msg")
+
+    tradeable = [s for s in symbols if s in price_map]
+    if not tradeable:
+        st.caption("Live prices are needed to trade — none of your starred symbols priced just now.")
+        return
+
+    t1, t2, t3 = st.columns([1.4, 2, 2])
+    side = t1.segmented_control(
+        "Side", ["Buy", "Sell"], default="Buy", key="wl_trade_side",
+        label_visibility="collapsed",
+    ) or "Buy"
+    trade_sym = t2.selectbox("Symbol", tradeable, key="wl_trade_sym", label_visibility="collapsed")
+    amount = t3.number_input(
+        "Amount (paper USD)", min_value=10.0, max_value=1_000_000.0, value=500.0,
+        step=50.0, key="wl_trade_amt", label_visibility="collapsed",
+    )
+    live_px = price_map.get(trade_sym, 0.0)
+    acct = store.get_account(USER_ID)
+    st.caption(
+        f"{trade_sym} @ ${live_px:,.2f} · buys {amount/live_px:.4f} shares · "
+        f"paper cash available ${acct['cash']:,.2f}"
+        if live_px else "No live price for the selected symbol."
+    )
+    st.button(
+        "Place paper order",
+        key="wl_place_btn",
+        type="primary",
+        on_click=_place_store_trade,
+        args=("wl_trade_msg", str(side).upper(), trade_sym, float(amount), float(live_px)),
+        width="stretch",
+        disabled=not live_px,
+    )
+
+
+def render_wallet_page() -> None:
+    """Two fully-separate tabs: a read-only on-chain address watcher (public
+    data only, never touches the ledger) and the simulated paper wallet."""
+    _page_header(
+        "Wallet",
+        "Two wallets, kept deliberately apart: a read-only view of a real public "
+        "blockchain address, and your simulated paper cash.",
+    )
+
+    watch_tab, paper_tab = st.tabs(["Watch address · read-only", "Simulated · paper"])
+
+    # --- TAB 1: read-only on-chain watcher ----------------------------------
+    with watch_tab:
+        st.markdown(
+            '<div class="disclaimer">🔒 This reads <b>public chain data only</b>. '
+            "Aurora never holds your keys, never asks for a seed phrase, and can "
+            "never move funds. A watched balance is <b>never</b> written into the "
+            "paper ledger.</div>",
+            unsafe_allow_html=True,
+        )
+        chain = st.segmented_control(
+            "Chain", ["BTC", "ETH"], default="BTC", key="wallet_chain",
+            label_visibility="collapsed",
+        ) or "BTC"
+        addr = st.text_input(
+            "Public address", key="wallet_addr",
+            placeholder="Paste a public BTC address (bc1… / 1… / 3…)"
+            if chain == "BTC" else "Paste a public ETH address (0x…)",
+        ).strip()
+
+        if not addr:
+            st.caption("Enter a public address above to look up its on-chain balance.")
+        elif chain == "BTC":
+            data = _btc_address_balance(addr)
+            if data is None:
+                st.error("Couldn't reach Blockstream or the address looks invalid. Double-check it.")
+            else:
+                bal, txs = data
+                b1, b2 = st.columns(2)
+                b1.markdown(
+                    f'<div class="stat-cell"><div class="stat-label">BTC balance</div>'
+                    f'<div class="stat-value">₿ {bal:,.8f}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                b2.markdown(
+                    f'<div class="stat-cell"><div class="stat-label">Total transactions</div>'
+                    f'<div class="stat-value">{txs:,}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption("Source: Blockstream public API · keyless · read-only.")
+        else:  # ETH
+            st.info(
+                "ETH lookups need an Etherscan API key. Add `ETHERSCAN_API_KEY` to "
+                "`.streamlit/secrets.toml` to enable read-only ETH balances."
+            )
+
+    # --- TAB 2: simulated paper wallet --------------------------------------
+    with paper_tab:
+        st.markdown('<span class="paper-pill">◆ Paper · fake money</span>', unsafe_allow_html=True)
+        acct = store.get_account(USER_ID)
+        held = tuple(sorted(acct["positions"].keys()))
+        prices = _live_prices(held)
+        positions_value = sum(prices.get(s, 0.0) * q for s, q in acct["positions"].items())
+        equity = acct["cash"] + positions_value
+
+        g1, g2, g3 = st.columns(3)
+        for col, lbl, val in (
+            (g1, "Paper cash", f"${acct['cash']:,.2f}"),
+            (g2, "Positions value", f"${positions_value:,.2f}"),
+            (g3, "Total equity", f"${equity:,.2f}"),
+        ):
+            col.markdown(
+                f'<div class="stat-cell"><div class="stat-label">{lbl}</div>'
+                f'<div class="stat-value">{val}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        if acct["positions"]:
+            st.markdown('<div class="section">Positions</div>', unsafe_allow_html=True)
+            rows = []
+            for s, qty in sorted(acct["positions"].items()):
+                px = prices.get(s)
+                rows.append({
+                    "Symbol": label(s),
+                    "Shares": f"{qty:.4f}",
+                    "Last price": f"${px:,.2f}" if px is not None else "—",
+                    "Value": f"${px * qty:,.2f}" if px is not None else "—",
+                })
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        else:
+            st.caption("No paper positions yet — use Swap below to open one.")
+
+        # Swap action — dollar-denominated buy/sell, persisted via store.py.
+        st.markdown('<div class="section">Swap</div>', unsafe_allow_html=True)
+        _render_trade_result("wallet_trade_msg")
+        # Offer held symbols + a few liquid defaults so there's always something.
+        swap_universe = sorted(set(acct["positions"].keys()) | set(MARQUEE_TICKERS))
+        s1, s2, s3 = st.columns([1.4, 2, 2])
+        swap_side = s1.segmented_control(
+            "Side", ["Buy", "Sell"], default="Buy", key="wallet_swap_side",
+            label_visibility="collapsed",
+        ) or "Buy"
+        swap_sym = s2.selectbox("Symbol", swap_universe, key="wallet_swap_sym",
+                                label_visibility="collapsed")
+        swap_amt = s3.number_input(
+            "Amount (paper USD)", min_value=10.0, max_value=1_000_000.0, value=500.0,
+            step=50.0, key="wallet_swap_amt", label_visibility="collapsed",
+        )
+        swap_px = _live_prices((swap_sym,)).get(swap_sym, 0.0)
+        st.caption(
+            f"{label(swap_sym)} @ ${swap_px:,.2f} · fake money, real prices."
+            if swap_px else "No live price for the selected symbol right now."
+        )
+        st.button(
+            "Swap",
+            key="wallet_swap_btn",
+            type="primary",
+            on_click=_place_store_trade,
+            args=("wallet_trade_msg", str(swap_side).upper(), swap_sym, float(swap_amt), float(swap_px)),
+            width="stretch",
+            disabled=not swap_px,
+        )
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _btc_address_balance(addr: str) -> tuple[float, int] | None:
+    """Return (BTC balance, tx count) for a public address via Blockstream's
+    keyless API. Returns None on any error / invalid address. Read-only —
+    this never touches keys and never writes to the paper ledger."""
+    import requests
+
+    try:
+        r = requests.get(f"https://blockstream.info/api/address/{addr}", timeout=10)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        cs = d.get("chain_stats", {}) or {}
+        ms = d.get("mempool_stats", {}) or {}
+        funded = int(cs.get("funded_txo_sum", 0)) + int(ms.get("funded_txo_sum", 0))
+        spent = int(cs.get("spent_txo_sum", 0)) + int(ms.get("spent_txo_sum", 0))
+        tx_count = int(cs.get("tx_count", 0)) + int(ms.get("tx_count", 0))
+        return (funded - spent) / 1e8, tx_count
+    except Exception:
+        return None
+
+
+def render_ai_insights_page() -> None:
+    """Read-only sentiment explorer: run the news engine on any symbol and see
+    the score, label, and the headlines behind it. Reuses sentiment.py output —
+    no new scoring logic lives here."""
+    _page_header(
+        "AI Insights",
+        "Point the news engine at any symbol. It scores recent headlines "
+        f"({'Claude' if os.environ.get('ANTHROPIC_API_KEY') else 'VADER rule-based'} "
+        "engine) and shows the read plus the receipts.",
+    )
+    sym = st.text_input(
+        "Symbol", key="ai_symbol", placeholder="AAPL, NVDA, BTC-USD…",
+    ).strip().upper()
+    if not sym:
+        st.caption("Enter a symbol to fetch its latest news sentiment.")
+        return
+
+    with st.spinner(f"Reading the news for {label(sym)}…"):
+        try:
+            res = sent.analyze(sym, limit=8)
+        except Exception:
+            res = None
+    if not res:
+        st.error("Couldn't fetch news for that symbol. Try another ticker.")
+        return
+
+    score = float(res.get("score", 0.0))
+    col_c, bg_c = _senti_visual(score)
+    engine = "Claude" if res.get("engine") == "claude" else "VADER"
+    m1, m2, m3 = st.columns(3)
+    m1.markdown(
+        f'<div class="stat-cell"><div class="stat-label">Sentiment score</div>'
+        f'<div class="stat-value" style="color:{col_c}">{score:+.2f}</div></div>',
+        unsafe_allow_html=True,
+    )
+    m2.markdown(
+        f'<div class="stat-cell"><div class="stat-label">Read</div>'
+        f'<div class="stat-value">{esc(res.get("label", "—"))}</div></div>',
+        unsafe_allow_html=True,
+    )
+    m3.markdown(
+        f'<div class="stat-cell"><div class="stat-label">Engine · headlines</div>'
+        f'<div class="stat-value">{engine} · {res.get("headline_count", 0)}</div></div>',
+        unsafe_allow_html=True,
+    )
+    if res.get("summary"):
+        st.markdown(
+            f'<div class="disclaimer" style="border-color:{ACCENT2};'
+            f'background:rgba(77,225,208,0.08);">{esc(res["summary"])}</div>',
+            unsafe_allow_html=True,
+        )
+
+    detail = res.get("detail", []) or []
+    if detail:
+        st.markdown('<div class="section">Headlines</div>', unsafe_allow_html=True)
+        for d in detail[:10]:
+            hs = d.get("score")
+            tag = ""
+            if hs is not None:
+                hc, hb = _senti_visual(float(hs))
+                tag = (f'<span class="wl-senti" style="color:{hc};background:{hb};'
+                       f'margin-right:0.5rem;">{float(hs):+.2f}</span>')
+            st.markdown(
+                f'<div class="news">{tag}{esc(d.get("headline", ""))}</div>',
+                unsafe_allow_html=True,
+            )
+
+
+def render_providers_page() -> None:
+    """At-a-glance status of the external data providers the app leans on.
+    Purely informational — surfaces which optional keys are configured."""
+    _page_header(
+        "Providers",
+        "The data + AI services powering Aurora. Optional keys unlock the richer "
+        "engines; without them the app degrades gracefully.",
+    )
+    anthropic_on = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    etherscan_on = bool(os.environ.get("ETHERSCAN_API_KEY"))
+    providers = [
+        ("yfinance", "Live stock & crypto prices, OHLCV, fundamentals, and news.", True, "Always on"),
+        ("Blockstream", "Keyless read-only BTC address balances (Wallet page).", True, "Always on"),
+        ("VADER", "Offline rule-based news sentiment — the default engine.", True, "Always on"),
+        ("Anthropic · Claude",
+         "Richer, nuanced sentiment + portfolio briefings when a key is present.",
+         anthropic_on, "Live" if anthropic_on else "Add key"),
+        ("Etherscan",
+         "Read-only ETH address balances on the Wallet page (needs a key).",
+         etherscan_on, "Live" if etherscan_on else "Add key"),
+    ]
+    for name, desc, on, status in providers:
+        st.markdown(
+            f'<div class="provider-row">'
+            f'  <div><div class="provider-name">{esc(name)}</div>'
+            f'  <div class="provider-desc">{esc(desc)}</div></div>'
+            f'  <div class="provider-status {"on" if on else "off"}">{esc(status)}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    st.caption("Optional keys live in `.streamlit/secrets.toml` (git-ignored) — never commit them.")
+
+
+def render_active_page(page: str) -> None:
+    """Dispatch a non-Home nav selection to its renderer. Draws the Aurora
+    brand strip first so every page reads as part of the same product."""
+    st.markdown(
+        '<div class="brand" style="margin-bottom:0.6rem;">'
+        '<span class="mark">✦ Aurora</span>'
+        '<span class="kicker"><b>Portfolio Lab</b> · risk &amp; sentiment</span></div>',
+        unsafe_allow_html=True,
+    )
+    if page == "Watchlist":
+        render_watchlist_page()
+    elif page == "Wallet":
+        render_wallet_page()
+    elif page == "AI Insights":
+        render_ai_insights_page()
+    elif page == "Providers":
+        render_providers_page()
+
+
 def reset_portfolio_defaults():
   """Reset key user inputs and clear per-ticker widget state safely."""
   st.session_state.tickers_text = "AAPL, MSFT, NVDA"
@@ -1570,6 +2064,17 @@ if add_req and add_req in {t.upper() for t in MARQUEE_TICKERS}:
   except Exception:
     st.query_params.clear()
   st.rerun()
+
+# ----------------------------------------------------------------------------
+# ICON NAV — vertical page switcher at the top of the sidebar. It sets
+# st.session_state["active_page"]. Any non-"Home" page renders its own content
+# in the main area and stops *before* the portfolio dashboard (and its sidebar
+# controls) below ever run — so those pages get a clean sidebar of just the nav.
+# ----------------------------------------------------------------------------
+active_page = render_nav()
+if active_page != "Home":
+    render_active_page(active_page)
+    st.stop()
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)

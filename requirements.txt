@@ -8,6 +8,7 @@ requests==2.34.2     # explicit pin (yfinance pulls it in) — used by logos.py 
 pandas==3.0.3
 numpy==2.5.0
 plotly==6.8.0
+streamlit-option-menu==0.4.0   # sidebar icon nav (Home / Watchlist / … / Wallet)
 vaderSentiment==3.3.2
 anthropic==0.115.0   # optional — only needed for the Claude-powered sentiment upgrade
 watchdog==6.0.0      # dev-only — faster file-watching / hot reload during `streamlit run`

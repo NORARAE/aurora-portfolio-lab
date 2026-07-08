@@ -4,6 +4,9 @@ secrets.toml
 .env
 *.key
 
+# --- Local runtime state (per-user, not source) ---
+aurora.db
+
 # --- Python ---
 __pycache__/
 *.py[cod]
