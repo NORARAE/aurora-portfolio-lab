@@ -76,6 +76,10 @@ st.markdown(f"""
   }}
   body {{ line-height: 1.45; }}
   #MainMenu, footer, header {{ visibility: hidden; }}
+  /* ...but NEVER hide the collapsed-sidebar reopen chevron. It lives inside the
+     header, and the app's page navigation (the icon nav) lives in the sidebar —
+     a hidden chevron would strand the user with no way back to the nav. */
+  [data-testid="stExpandSidebarButton"] {{ visibility: visible !important; }}
   .block-container {{ padding-top: 1.05rem; padding-bottom: 1.75rem; max-width: 1120px; }}
 
   .brand {{ display: inline-flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap;
@@ -276,20 +280,24 @@ st.markdown(f"""
     color: {TEXT}; border-radius: 10px; font-size: 0.72rem; font-weight: 600; padding: 0.18rem 0; }}
   [data-testid="stSidebar"] .stButton button:hover {{ border-color: {ACCENT}; color: {ACCENT2}; }}
 
-  /* Sidebar collapse/reopen toggle — Streamlit's built-in chevron gets an
-     aurora glow so users can find it easily when the sidebar is closed. */
-  [data-testid="stSidebarCollapseButton"] button {{
+  /* Sidebar collapse/reopen toggles — BOTH the in-sidebar close chevron and
+     the collapsed-state reopen chevron get an aurora glow so users can always
+     find them (the reopen one is the only path back to the icon nav). */
+  [data-testid="stSidebarCollapseButton"] button,
+  [data-testid="stExpandSidebarButton"] button {{
     background: linear-gradient(135deg, rgba(139,123,247,0.28), rgba(77,225,208,0.20)) !important;
     border: 1px solid rgba(139,123,247,0.6) !important;
     border-radius: 10px !important;
     box-shadow: 0 4px 14px rgba(139,123,247,0.28) !important;
     transition: transform 120ms ease, box-shadow 200ms ease !important;
   }}
-  [data-testid="stSidebarCollapseButton"] button:hover {{
+  [data-testid="stSidebarCollapseButton"] button:hover,
+  [data-testid="stExpandSidebarButton"] button:hover {{
     transform: scale(1.06);
     box-shadow: 0 6px 20px rgba(77,225,208,0.35) !important;
   }}
-  [data-testid="stSidebarCollapseButton"] button span {{
+  [data-testid="stSidebarCollapseButton"] button span,
+  [data-testid="stExpandSidebarButton"] button span {{
     color: {TEXT} !important;
   }}
 
@@ -693,6 +701,47 @@ st.markdown(f"""
   div[data-testid="stDialog"] button[kind="header"],
   div[role="dialog"] button[aria-label*="lose"] {{
     display: none !important;
+  }}
+
+  /* --------------------------------------------------------------------
+     NAV DRAWER — the icon nav opens Watchlist / AI Insights / Providers /
+     Wallet as a LEFT slide-out panel *over* the portfolio (which stays
+     rendered behind), not a full-page swap. Tapping the portfolio (the
+     backdrop), Esc, or the X dismisses it — handled by on_dismiss so it
+     returns you to the dashboard. All rules are scoped to dialogs that
+     contain .aurora-drawer-marker, so the ticker/account modals above are
+     untouched.
+     -------------------------------------------------------------------- */
+  div[data-testid="stDialog"]:has(.aurora-drawer-marker) {{
+    justify-content: flex-start !important;    /* anchor the panel to the left edge */
+    align-items: stretch !important;           /* full viewport height */
+    background: rgba(6,5,12,0.45) !important;   /* lighter backdrop — portfolio shows behind */
+  }}
+  div[data-testid="stDialog"]:has(.aurora-drawer-marker) > div,
+  div[data-testid="stDialog"]:has(.aurora-drawer-marker) div[role="dialog"] {{
+    width: min(760px, 94vw) !important;
+    max-width: 94vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 20px 20px 0 !important;
+    box-shadow: 24px 0 70px rgba(0,0,0,0.55) !important;
+    overflow-y: auto !important;
+    animation: auroraDrawerIn 0.26s cubic-bezier(0.2,0.7,0.2,1) both;
+  }}
+  @keyframes auroraDrawerIn {{
+    from {{ transform: translateX(-102%); opacity: 0.4; }}
+    to   {{ transform: translateX(0);      opacity: 1; }}
+  }}
+  /* The drawer KEEPS its X (dismissal is handled cleanly via on_dismiss). */
+  div[data-testid="stDialog"]:has(.aurora-drawer-marker) button[kind="header"] {{
+    display: inline-flex !important;
+  }}
+  @media (prefers-reduced-motion: reduce) {{
+    div[data-testid="stDialog"]:has(.aurora-drawer-marker) > div,
+    div[data-testid="stDialog"]:has(.aurora-drawer-marker) div[role="dialog"] {{
+      animation: none;
+    }}
   }}
 </style>
 """, unsafe_allow_html=True)
@@ -1801,15 +1850,23 @@ def render_providers_page() -> None:
     st.caption("Optional keys live in `.streamlit/secrets.toml` (git-ignored) — never commit them.")
 
 
-def render_active_page(page: str) -> None:
-    """Dispatch a non-Home nav selection to its renderer. Draws the Aurora
-    brand strip first so every page reads as part of the same product."""
-    st.markdown(
-        '<div class="brand" style="margin-bottom:0.6rem;">'
-        '<span class="mark">✦ Aurora</span>'
-        '<span class="kicker"><b>Portfolio Lab</b> · risk &amp; sentiment</span></div>',
-        unsafe_allow_html=True,
-    )
+def _close_drawer():
+    """on_dismiss callback: fired when the user taps the portfolio (backdrop),
+    presses Esc, or clicks the X on the nav drawer. Clears the drawer and bumps
+    the nav epoch so the sidebar menu snaps back to Home — so a dismissed drawer
+    never reopens on the next rerun, and re-selecting the same item works."""
+    st.session_state["drawer_page"] = None
+    st.session_state["nav_epoch"] = st.session_state.get("nav_epoch", 0) + 1
+
+
+@st.dialog(" ", width="large", on_dismiss=_close_drawer)
+def _page_drawer(page: str) -> None:
+    """A non-Home page rendered as a LEFT slide-out drawer over the portfolio.
+    The marker div scopes the drawer CSS; on_dismiss handles tap-to-close.
+    The dashboard renders behind this, so tapping it returns you to the
+    portfolio. Interactions inside only rerun this fragment, not the dashboard."""
+    st.markdown('<div class="aurora-drawer-marker" style="display:none"></div>',
+                unsafe_allow_html=True)
     if page == "Watchlist":
         render_watchlist_page()
     elif page == "Wallet":
@@ -2044,15 +2101,20 @@ if add_req and add_req in {t.upper() for t in MARQUEE_TICKERS}:
   st.rerun()
 
 # ----------------------------------------------------------------------------
-# ICON NAV — vertical page switcher at the top of the sidebar. It sets
-# st.session_state["active_page"]. Any non-"Home" page renders its own content
-# in the main area and stops *before* the portfolio dashboard (and its sidebar
-# controls) below ever run — so those pages get a clean sidebar of just the nav.
+# ICON NAV + DRAWER — the sidebar nav never replaces the portfolio. "Home" is
+# the always-rendered dashboard below; selecting Watchlist / AI Insights /
+# Providers / Wallet opens that page as a LEFT slide-out drawer *over* the
+# dashboard (which stays visible behind it). Tapping the portfolio, Esc, or the
+# X dismisses the drawer (see _close_drawer) and returns you to the dashboard.
+# We open the drawer here — before the dashboard's own early st.stop()s — so it
+# still appears even when there are no holdings yet.
 # ----------------------------------------------------------------------------
 active_page = render_nav()
-if active_page != "Home":
-    render_active_page(active_page)
-    st.stop()
+drawer_page = None if active_page == "Home" else active_page
+st.session_state["drawer_page"] = drawer_page
+if drawer_page:
+    st.session_state.modal_kind = None   # mutual exclusion: never two dialogs in one run
+    _page_drawer(drawer_page)
 
 with st.sidebar:
     st.markdown('<div class="section" style="margin-top:0">Assets</div>', unsafe_allow_html=True)
@@ -3799,7 +3861,10 @@ st.caption("For learning / portfolio use only — not financial advice.")
 # Streamlit's @st.dialog opens as an overlay with backdrop dim. Users can
 # see their portfolio charts blurred behind the ticker detail / account view.
 # ----------------------------------------------------------------------------
-if st.session_state.modal_kind == "ticker" and st.session_state.modal_symbol:
-    _ticker_modal(st.session_state.modal_symbol)
-elif st.session_state.modal_kind == "account":
-    _account_modal()
+# Guard: a nav drawer may already have been opened above, and Streamlit allows
+# only one dialog per run — so only open a ticker/account modal when no drawer is.
+if not st.session_state.get("drawer_page"):
+    if st.session_state.modal_kind == "ticker" and st.session_state.modal_symbol:
+        _ticker_modal(st.session_state.modal_symbol)
+    elif st.session_state.modal_kind == "account":
+        _account_modal()
