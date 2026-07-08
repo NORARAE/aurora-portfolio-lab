@@ -1831,21 +1831,10 @@ def reset_portfolio_defaults():
   st.session_state.run_sentiment = True
   st.session_state.use_source_weighting = True
 
-  # Remove dynamic keys to let widgets re-seed clean defaults on rerun.
-  drop_prefixes = ("pct_", "amt_", "mini_pct_", "mini_amt_")
-  drop_exact = {
-    "mini_tickers_text",
-    "mini_invested",
-    "mini_savings_apy",
-    "mini_inflation",
-    "mini_rf",
-    "mini_alloc_mode",
-    "mini_show_real",
-    "mini_run_sentiment",
-    "mini_use_source_weighting",
-  }
+  # Remove dynamic per-ticker allocation keys so the sliders/number inputs
+  # re-seed clean defaults on the next rerun.
   for k in list(st.session_state.keys()):
-    if k in drop_exact or k.startswith(drop_prefixes):
+    if k.startswith(("pct_", "amt_")):
       del st.session_state[k]
 
 
@@ -1916,17 +1905,6 @@ def rebalance_pct(changed_ticker: str, tickers: tuple[str, ...]):
       st.session_state[f"pct_{t}"] = v
 
 
-def sync_widget_to_state(widget_key: str, state_key: str):
-    """Copy an auxiliary widget value into the shared session_state source of truth."""
-    st.session_state[state_key] = st.session_state.get(widget_key)
-
-
-def sync_pct_and_rebalance(widget_key: str, state_key: str, changed_ticker: str, tickers: tuple[str, ...]):
-  """Sync a mini percent slider into canonical state, then rebalance to keep total at 100."""
-  st.session_state[state_key] = st.session_state.get(widget_key)
-  rebalance_pct(changed_ticker, tickers)
-
-
 # ----------------------------------------------------------------------------
 # PRESET PORTFOLIOS — one-click loaders for common curated baskets.
 # Each entry is (button label, ticker CSV, sidebar-tooltip blurb). Grouping
@@ -1947,7 +1925,7 @@ def load_preset(csv: str):
     widgets so they re-seed to an even split for the new set."""
     st.session_state.tickers_text = csv
     for k in list(st.session_state.keys()):
-        if k.startswith(("pct_", "amt_", "mini_pct_", "mini_amt_")):
+        if k.startswith(("pct_", "amt_")):
             del st.session_state[k]
 
 
@@ -2245,225 +2223,12 @@ with st.sidebar:
 
 
 # ----------------------------------------------------------------------------
-# HEADER
+# HEADER / CONTROLS
 # ----------------------------------------------------------------------------
-st.session_state["mini_tickers_text"] = st.session_state.get("tickers_text", "")
-st.session_state["mini_invested"] = int(st.session_state.get("invested", 10_000))
-st.session_state["mini_savings_apy"] = float(st.session_state.get("savings_apy", 0.04))
-st.session_state["mini_inflation"] = float(st.session_state.get("inflation", 0.038))
-st.session_state["mini_rf"] = float(st.session_state.get("rf", 0.04))
-st.session_state["mini_alloc_mode"] = st.session_state.get("alloc_mode", "% weight")
-st.session_state["mini_show_real"] = bool(st.session_state.get("show_real", False))
-st.session_state["mini_run_sentiment"] = bool(st.session_state.get("run_sentiment", True))
-st.session_state["mini_use_source_weighting"] = bool(st.session_state.get("use_source_weighting", True))
-
-for _t in tickers:
-    st.session_state[f"mini_pct_{_t}"] = int(st.session_state.get(f"pct_{_t}", 0))
-    st.session_state[f"mini_amt_{_t}"] = float(st.session_state.get(f"amt_{_t}", 0.0))
-
-with st.popover("☰ Menu · Controls"):
-    # Aurora hero strip — throbbing dot mirrors the AI briefing chip so users
-    # instantly see whether Claude is live or the app is on the template.
-    _ai_active = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    _dot_cls = "" if _ai_active else "off"
-    _engine_txt = "Claude · live" if _ai_active else "Rule-based"
-    _engine_cls = "" if _ai_active else "template"
-    st.markdown(
-        f'<div class="pop-hero">'
-        f'  <span class="pop-hero-dot {_dot_cls}"></span>'
-        f'  <span class="pop-hero-title">AI briefing</span>'
-        f'  <span class="pop-hero-engine {_engine_cls}">{_engine_txt}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption("Adjust your portfolio — changes apply instantly.")
-
-    st.markdown('<div class="menu-group-title">Assets</div>', unsafe_allow_html=True)
-    st.text_input(
-        "Tickers (stocks or crypto)",
-        key="mini_tickers_text",
-        on_change=sync_widget_to_state,
-        args=("mini_tickers_text", "tickers_text"),
-    )
-    qcols_mini = st.columns(3)
-    for i, (sym, lbl) in enumerate(quick):
-        qcols_mini[i % 3].button(
-            lbl,
-            key=f"mini_add_{sym}",
-            on_click=add_ticker,
-            args=(sym,),
-            width="stretch",
-        )
-
-    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="menu-group-title">Allocation</div>', unsafe_allow_html=True)
-    st.number_input(
-        "Hypothetical investment ($)",
-        min_value=500,
-        max_value=1_000_000,
-        step=500,
-        key="mini_invested",
-        format="%d",
-        on_change=sync_widget_to_state,
-        args=("mini_invested", "invested"),
-    )
-    pop_alloc_mode = st.segmented_control(
-        "Allocation mode",
-        ["% weight", "$ amount"],
-        key="mini_alloc_mode",
-        default=st.session_state.get("mini_alloc_mode", "% weight"),
-        on_change=sync_widget_to_state,
-        args=("mini_alloc_mode", "alloc_mode"),
-        label_visibility="collapsed",
-    ) or st.session_state.get("mini_alloc_mode", "% weight")
-    st.button(
-        "⚖ Equalize",
-        key="mini_equalize",
-        on_click=equalize_alloc,
-        args=(tickers, st.session_state.get("alloc_mode", "% weight")),
-        width="stretch",
-    )
-
-    if pop_alloc_mode == "$ amount":
-        st.caption("Dollars set the ratio between holdings — scaled to fit your investment.")
-        for t in tickers:
-            st.number_input(
-                label(t),
-                min_value=0,
-                step=100,
-                key=f"mini_amt_{t}",
-                format="%d",
-                on_change=sync_widget_to_state,
-                args=(f"mini_amt_{t}", f"amt_{t}"),
-            )
-        pop_weights = {t: float(st.session_state.get(f"mini_amt_{t}", 0.0)) for t in tickers}
-    else:
-        st.caption("Percent in each holding (auto-balances to 100%).")
-        for t in tickers:
-            st.slider(
-                label(t),
-                0,
-                100,
-                key=f"mini_pct_{t}",
-                format="%d%%",
-                on_change=sync_pct_and_rebalance,
-                args=(f"mini_pct_{t}", f"pct_{t}", t, tuple(tickers)),
-            )
-        pop_weights = {t: float(st.session_state.get(f"mini_pct_{t}", 0)) / 100.0 for t in tickers}
-
-    pop_total_w = sum(pop_weights.values())
-    if pop_total_w > 0:
-        seg = [ACCENT2, ACCENT, GOLD, UP, "#e879f9", "#60a5fa"]
-        ordered = sorted(pop_weights.items(), key=lambda kv: -kv[1])
-        pop_bar = ('<div style="display:flex;height:8px;border-radius:6px;'
-                   'overflow:hidden;margin:0.15rem 0 0.55rem 0;">')
-        pop_recap = ""
-        pop_amount = float(st.session_state.get("invested", 10_000))
-        for i, (t, w) in enumerate(ordered):
-            share = w / pop_total_w
-            color = seg[i % len(seg)]
-            pop_bar += f'<div style="width:{share*100:.4f}%;background:{color};"></div>'
-            pop_recap += (f'<div style="display:flex;justify-content:space-between;'
-                          f'font-size:0.76rem;padding:0.1rem 0;">'
-                          f'<span style="color:{TEXT};">{esc(label(t))}</span>'
-                          f'<span style="color:{MUTED};">{share*100:.0f}% · {money(pop_amount*share)}</span></div>')
-        st.markdown(pop_bar + '</div>' + pop_recap, unsafe_allow_html=True)
-
-    with st.expander("Advanced assumptions", expanded=False):
-        st.slider(
-            "High-yield savings APY",
-            0.0,
-            0.08,
-            float(st.session_state.get("mini_savings_apy", 0.04)),
-            0.005,
-            key="mini_savings_apy",
-            on_change=sync_widget_to_state,
-            args=("mini_savings_apy", "savings_apy"),
-        )
-        st.slider(
-            "Annual inflation",
-            0.0,
-            0.10,
-            float(st.session_state.get("mini_inflation", 0.038)),
-            0.002,
-            key="mini_inflation",
-            on_change=sync_widget_to_state,
-            args=("mini_inflation", "inflation"),
-        )
-        st.slider(
-            "Risk-free rate (Sharpe)",
-            0.0,
-            0.08,
-            float(st.session_state.get("mini_rf", 0.04)),
-            0.005,
-            key="mini_rf",
-            on_change=sync_widget_to_state,
-            args=("mini_rf", "rf"),
-        )
-        st.toggle(
-          "Show inflation-adjusted line",
-          key="mini_show_real",
-          on_change=sync_widget_to_state,
-          args=("mini_show_real", "show_real"),
-        )
-        st.toggle(
-          "AI news sentiment",
-          key="mini_run_sentiment",
-          on_change=sync_widget_to_state,
-          args=("mini_run_sentiment", "run_sentiment"),
-        )
-        st.toggle(
-          "Source credibility weighting",
-          key="mini_use_source_weighting",
-          on_change=sync_widget_to_state,
-          args=("mini_use_source_weighting", "use_source_weighting"),
-          disabled=not st.session_state.get("mini_run_sentiment", True),
-        )
-
-    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="menu-group-title">Quick tips</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        '<span>Add crypto by suffixing <b>-USD</b> — <b>BTC-USD</b>, <b>ETH-USD</b>.</span></div>'
-        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        '<span>Try a preset basket (<b>Assets → Load a preset portfolio</b>) to see the AI read on a curated theme.</span></div>'
-        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        '<span>Copy the <b>Share this view</b> URL to save a portfolio configuration.</span></div>'
-        '<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        '<span>Hover any ticker on the tape to pause it and read the price.</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="menu-group-title">Paper trading</div>', unsafe_allow_html=True)
-    _pa = st.session_state.paper
-    _pa_cash = _pa["cash"]
-    _pa_pos = len(_pa["positions"])
-    _pa_trades = len(_pa["trades"])
-    st.markdown(
-        f'<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        f'<span>Cash <b>${_pa_cash:,.2f}</b> · <b>{_pa_pos}</b> position{"s" if _pa_pos != 1 else ""} · '
-        f'<b>{_pa_trades}</b> trade{"s" if _pa_trades != 1 else ""}</span></div>'
-        f'<div class="pop-tip"><span class="pop-tip-icon">◆</span>'
-        f'<span>Every ticker in the tape opens a chart + Buy/Sell page. Zero risk, real prices.</span></div>'
-        f'<div class="pop-links" style="margin-top:0.35rem">'
-        f'<a href="?view=_account" target="_self">Open account →</a>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="menu-spacer"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="menu-group-title">Learn more</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="pop-links">'
-        '<a href="https://github.com/NORARAE/aurora-portfolio-lab" target="_blank">GitHub ↗</a>'
-        '<a href="https://www.linkedin.com/in/ngenetti/" target="_blank">LinkedIn ↗</a>'
-        '<a href="https://github.com/NORARAE/aurora-portfolio-lab#readme" target="_blank">Docs ↗</a>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.caption("Full controls in the sidebar (‹ top-left)")
+# The sidebar (rendered above) is the single controls surface: the icon nav
+# from nav.py at the top, then the portfolio inputs. The old main-area
+# "☰ Menu · Controls" popover (a duplicate of those inputs, mirrored via
+# mini_* keys) was removed so the sidebar is the one place to drive the app.
 
 # Live ticker tape — renders as the first thing on the page, above the
 # Aurora header. Fetches are cached for 5min; if the market API is down

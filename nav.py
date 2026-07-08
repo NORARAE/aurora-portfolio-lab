@@ -105,11 +105,15 @@ def render_nav() -> str:
             styles=_STYLES,
         )
 
-    # Defensive: on some cold-start / bare-mode renders the component can hand
-    # back None before it hydrates. Fall back to the current page so we never
-    # route to a phantom selection.
+    # In a live `streamlit run`, the option_menu component ALWAYS returns one of
+    # PAGES — even the very first paint returns the default_index item, never
+    # None (verified against a real session). So this guard is unreachable in a
+    # browser and can never override a real click. It fires ONLY in a
+    # frontend-less run — AppTest / bare `import`, where `runtime.exists()` is
+    # False and no component reply arrives — recovering to the last-known page
+    # so tests and tooling can still drive routing.
     if selected not in PAGES:
-        selected = PAGES[default_index]
+        selected = current  # `current` == last active_page (defaults to "Home")
 
     # Mirror into the shared read key (never bound as a widget key → no
     # DuplicateWidgetID). This is the single source of truth callers read.
