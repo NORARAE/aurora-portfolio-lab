@@ -19,7 +19,7 @@
 </p>
 
 **Live demo:** <https://playplayai.com/> ·
-**Signature:** [PlayPlayCode](https://www.linkedin.com/in/ngenetti/)
+**Signature:** [PlayPlayCode](https://playplayai.com/)
 
 ---
 
@@ -199,7 +199,7 @@ CI runs the same set on Python 3.12 and 3.13 on every push to `main`.
 
 ## Credits
 
-- Design & engineering: [**PlayPlayCode**](https://www.linkedin.com/in/ngenetti/)
+- Design & engineering: [**PlayPlayCode**](https://playplayai.com/)
 
 ## Disclaimer
 

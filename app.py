@@ -2403,7 +2403,7 @@ with h1:
 with h2:
     st.markdown(
         '<div style="text-align:right" class="sig">designed + coded by '
-        '<a href="https://www.linkedin.com/in/ngenetti/" target="_blank">PlayPlayCode ↗</a></div>',
+        '<a href="https://playplayai.com/" target="_blank">PlayPlayCode ↗</a></div>',
         unsafe_allow_html=True)
 
 if not tickers:
@@ -3833,12 +3833,12 @@ st.markdown(
     f'  </div>'
     f'  <div class="credits-links">'
     f'    <div class="credits-by">designed + coded by '
-    f'<a href="https://www.linkedin.com/in/ngenetti/" target="_blank" rel="noopener">PlayPlayCode ↗</a></div>'
+    f'<a href="https://playplayai.com/" target="_blank" rel="noopener">PlayPlayCode ↗</a></div>'
     f'    <div class="credits-actions">'
     f'      <a class="cta cta-primary" href="https://github.com/NORARAE/aurora-portfolio-lab"'
     f'         target="_blank" rel="noopener">{_github_svg} View source ↗</a>'
-    f'      <a class="cta" href="https://www.linkedin.com/in/ngenetti/"'
-    f'         target="_blank" rel="noopener">LinkedIn ↗</a>'
+    f'      <a class="cta" href="https://playplayai.com/"'
+    f'         target="_blank" rel="noopener">PlayPlayAI ↗</a>'
     f'    </div>'
     f'  </div>'
     f'</div>',
