@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
 
-**Live demo:** <https://aurora-portfolio-lab.streamlit.app/> ·
+**Live demo:** <https://playplayai.com/> ·
 **Signature:** [PlayPlayCode](https://www.linkedin.com/in/ngenetti/)
 
 ---
